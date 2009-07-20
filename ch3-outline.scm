@@ -731,3 +731,8 @@ w        ; => (a b c d)
 ;     = 2na + (n+1)(greater(a+i,o)) + (n-1)o
 
 ;;  * _ Exercise 3.31
+
+; We need to run the proc right away because running the proc will add actions to the agenda.
+; If we don't run proc, we will never add that first action to the agenda, and propagating
+;  will never add any further actions to the agenda.
+
