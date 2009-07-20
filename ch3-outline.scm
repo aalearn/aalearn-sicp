@@ -274,8 +274,6 @@
 ;; * _ Section 3.3
 
 ;;  * _ Exercise 3.12
-; Consider the interaction
-
 (define x (list 'a 'b))
 (define y (list 'c 'd))
 (define z (append x y))
@@ -397,6 +395,16 @@ w        ; => (a b c d)
 (count-pairs x7)    ; => 3
 (count-pairs x-inf) ; => 3
 
+; inimino's answer -- doesn't handle case of car and cdr having same pair
+(define (count-pairs x)
+  (define (count x seen)
+    (if (or (not (pair? x)) (null? x) (memq x seen))
+        0
+        (+ (count (car x) (cons x seen))
+           (count (cdr x) (cons x seen))
+           1)))
+  (count x '()))
+
 ;;  * _ Exercise 3.18
 (define (find-loop obj)
   (define found-pairs (list 'start))
@@ -416,6 +424,14 @@ w        ; => (a b c d)
 (define with-loop (list 'a 'b 'c))
 (set-cdr! (cddr with-loop) with-loop)
 (find-loop with-loop) ; => #t
+
+; inimino's better solution -- mutability not needed!
+(define (cyclical? x)
+  (define (go x seen)
+    (cond ((memq x seen) true)
+          ((null? x) false)
+          (else (go (cdr x) (cons x seen)))))
+  (go x '()))
 
 ;;  * _ Exercise 3.19
 (define (find-loop obj)
@@ -506,12 +522,16 @@ w        ; => (a b c d)
       (car (front-ptr queue))))
 (define (rear-deque queue)
   (if (empty-deque? queue)
-      (error "FRONT called with an empty queue" queue)
+      (error "REAR called with an empty queue" queue)
       (car (rear-ptr queue))))
 ; Deleting an object from the rear of the list requires a backwards
 ;  pointer from the nth object to the n-1 (doubly linked list) 
 ;  => instead of pairs, we need triples (item (prev-ptr next-ptr))
 (define (make-triple item) (cons item (cons '() '())))
+(define (next-ptr item) (cddr item))
+(define (prev-ptr item) (cadr item))
+(define (set-next-ptr! item value) (set-cdr! (cdr item) value))
+(define (set-prev-ptr! item value) (set-car! (cdr item) value))
 (define (front-insert-deque! queue item)
   (let ((new-triple (make-triple item)))
     (cond ((empty-deque? queue)
@@ -519,8 +539,8 @@ w        ; => (a b c d)
            (set-rear-ptr! queue new-triple)
            queue)
           (else
-           (set-cdr! (cdr new-triple) (front-ptr queue))
-           (set-car! (cdr (front-ptr queue)) new-triple) 
+           (set-next-ptr! new-triple (front-ptr queue))
+           (set-prev-ptr! (front-ptr queue) new-triple) 
            (set-front-ptr! queue new-triple)
            queue))))
 (define (rear-insert-deque! queue item)
@@ -530,8 +550,8 @@ w        ; => (a b c d)
            (set-rear-ptr! queue new-triple)
            queue)
           (else
-           (set-cdr! (cdr (rear-ptr queue)) new-triple)
-	   (set-car! (cdr new-triple) rear-ptr)
+           (set-next-ptr! (rear-ptr queue) new-triple)
+	   (set-prev-ptr! new-triple rear-ptr)
            (set-rear-ptr! queue new-triple)
            queue))))
 (define (only-one-item? queue) (eq? (front-ptr queue) (rear-ptr queue)))
@@ -541,8 +561,8 @@ w        ; => (a b c d)
         (else
 	 (if (only-one-item? queue)
 	     (set-rear-ptr! queue '())
-	     (set-car! (cddr (front-ptr queue)) '()))
-         (set-front-ptr! queue (cddr (front-ptr queue)))
+	     (set-prev-ptr! (next-ptr (front-ptr queue)) '()))
+         (set-front-ptr! queue (next-ptr (front-ptr queue)))
          queue)))
 (define (rear-delete-deque! queue)
   (cond ((empty-deque? queue)
@@ -550,8 +570,8 @@ w        ; => (a b c d)
         (else
 	 (if (only-one-item? queue)
 	     (set-front-ptr! queue '())
-	     (set-cdr! (cadr (rear-ptr queue)) '())) 
-         (set-rear-ptr! queue (cadr (rear-ptr queue)))
+	     (set-next-ptr! (prev-ptr (rear-ptr queue)) '()))
+         (set-rear-ptr! queue (prev-ptr (rear-ptr queue)))
          queue)))
 (define (print-deque queue)
   (define (inner temp-ptr)
@@ -565,6 +585,149 @@ w        ; => (a b c d)
 (print-deque (rear-insert-deque! dq1 'b))  ; => (a b)
 (print-deque (front-insert-deque! dq1 'c)) ; => (c a b)
 (print-deque (rear-insert-deque! dq1 'd))  ; => (c a b d)
-(print-deque (front-delete-deque! dq1))  ; => (c a b d)
+(print-deque (front-delete-deque! dq1))    ; => (a b d)
+(print-deque (rear-delete-deque! dq1))    ; => (a b d)
 
 (cadr (make-triple 'b))
+
+;;  * _ Exercise 3.24
+(define (make-table same-key?)
+  (define (assoc key records)
+    (cond ((null? records) false)
+	  ((same-key? key (caar records)) (car records))
+	  (else (assoc key (cdr records)))))
+  (let ((local-table (list '*table*)))
+    (define (lookup key)
+      (let ((record (assoc key (cdr local-table))))
+	(if record
+	    (cdr record)
+	    false)))
+    (define (insert! key value)
+      (let ((record (assoc key (cdr local-table))))
+	(if record
+                  (set-cdr! record value)
+                  (set-cdr! local-table
+			    (cons (cons key value) (cdr local-table)))))
+      'ok)
+    (define (dispatch m)
+      (cond ((eq? m 'lookup-proc) lookup)
+            ((eq? m 'insert-proc!) insert!)
+            (else (error "Unknown operation -- TABLE" m))))
+    dispatch))
+
+(define atable (make-table (lambda (x1 x2) (< (abs (- x1 x2)) 0.1))))
+
+((atable 'insert-proc!) 3.0 6.0)
+((atable 'insert-proc!) 4.0 8.0)
+((atable 'lookup-proc) 3.05)      ; => 6.
+((atable 'insert-proc!) 3.02 99)
+((atable 'lookup-proc) 2.93)      ; => 99
+
+;;  * _ Exercise 3.25
+(define (lookup key-list table)
+  (let ((subtable (assoc (car key-list) (cdr table))))
+    (if subtable
+	(if (null? (cdr key-list))
+	    (cdr subtable)
+	    (lookup (cdr key-list) subtable))
+	false)))
+(define (insert! key-list value table)
+  (define (new-branch key-list value)
+    (if (null? (cdr key-list))
+	(cons (car key-list) value)
+	(list (car key-list) (new-branch (cdr key-list) value))))
+  (let ((subtable (assoc (car key-list) (cdr table))))
+    (if subtable
+	(if (null? (cdr key-list))
+	    (set-cdr! subtable value)
+	    (insert! (cdr key-list) value subtable))
+	(set-cdr! table (cons (new-branch key-list value)
+			      (cdr table))))
+    'ok))
+(define (make-table)
+  (list '*table*))
+
+(define kl (list 'apple 1 5))
+
+(define btable (make-table))
+(insert! (list 'apple 1 5) 'red btable)
+(insert! (list 'apple 2) 'green btable)
+(lookup (list 'apple 1 5) btable)          ; => red
+(lookup (list 'apple 2) btable)            ; => green
+(insert! (list 'apple 1 5) 'golden btable) ; => golden
+
+;;  * _ Exercise 3.26
+; If we order by key, we can structure the records by a binary tree.  There are many ways to do this,
+;  but this diagram illustrates one possible way:
+;      [*table*][]
+;                V
+;                [][]->[][]------>[][]------------------------>[][/]
+;                |      |         |                            | 
+;               'ckey  'cvalue    [][]->[][]->[][]->[][/]      [][]->[][]->[][]->[][/]      
+;                                 |     |     |     |          |     |     |     |
+;                               'akey 'avalue nil   nil      'fkey 'fvalue nil   nil 
+;
+
+;;  * _ Exercise 3.27
+; global -> |--------------------------------------------------------------------------|
+;           | memoize                                                                  |
+;           | memo-fib-|                                                               |
+;           |          |                                                               |
+;           |----------|---------------------------------------------------------------|
+;                      |  E1->|----------------------------------------|      
+;                      |      | table = make-table, modified           |
+;                      |      | f                                      |
+;                      |      |----------------------------------------|
+;                      |         |
+;                     ()()-------|
+;
+; This would not have worked if we had just used (memoize fib) because the recursive calls
+;  would not have themselves been memoized, therefore we would only memoize the outermost call,
+;  not saving any work.
+
+;;  * _ Exercise 3.28
+(define (or-gate a1 a2 output)
+  (define (or-action-procedure)
+    (let ((new-value
+           (logical-or (get-signal a1) (get-signal a2))))
+      (after-delay or-gate-delay
+                   (lambda ()
+                     (set-signal! output new-value)))))
+  (add-action! a1 or-action-procedure)
+  (add-action! a2 or-action-procedure)
+  'ok)
+(define (logical-or s t)
+  (cond ((= s 1) 1)
+        ((= t 1) 1)
+	((and (= s 0) (= t 0)) 0)
+        (else (error "Invalid signal" s t))))
+
+;;  * _ Exercise 3.29
+(define (or-gate a1 a2 output)
+  (let ((not-a1 (make-wire))
+	(not-a2 (make-wire))
+	(and-out (make-wire)))
+    (inverter a1 not-a1)
+    (inverter a2 not-a2)
+    (and-gate not-a1 not-a2 and-out)
+    (inverter and-out output)))
+; delaytime = 2 * inverter-delay + and-gate-delay
+
+;;  * _ Exercise 3.30
+; Delay time for 1 half adder = 
+; DSHA = and + greater of (and + inverter, or)
+; DCHA = and
+; For full adder =>
+; DSFA = 2 * DSHA = 2a + 2(greater(a+i,o))
+; DCFA = greater(DCHA,DSHA + DCHA)+or = DSha + DCha + or = 2a + (greater(a+i,o)) + o
+
+; For n = 2
+; DS2 = DSFA = 2a + 2(greater(a+i,o))
+; DS1 = DCFA + DSFA = 2a + (greater(a+i,o)) + o + 2a + 2(greater(a+i,o)) = 4a + 3(greater(a+i,o)) + o
+; DC = DCFA + DCFA = 2a + 2(greater(a+i,o)) + 2o
+
+; For n = 3
+; DS1 = (n-1)*DCFA + DSFA = (2a + (greater(a+i,o)) + o)*(n-1) + 2a + 2(greater(a+i,o)) = 
+;     = 2na + (n+1)(greater(a+i,o)) + (n-1)o
+
+;;  * _ Exercise 3.31
