@@ -703,17 +703,21 @@ w        ; => (a b c d)
         (else (error "Invalid signal" s t))))
 
 ;;  * _ Exercise 3.29
-(define (or-gate a1 a2 output)
-  (let ((not-a1 (make-wire))
-	(not-a2 (make-wire))
+(define (or-gate in1 in2 output)
+  (let ((not-in1 (make-wire))
+	(not-in2 (make-wire))
 	(and-out (make-wire)))
-    (inverter a1 not-a1)
-    (inverter a2 not-a2)
-    (and-gate not-a1 not-a2 and-out)
+    (inverter in1 not-in1)
+    (inverter in2 not-in2)
+    (and-gate not-in1 not-in2 and-out)
     (inverter and-out output)))
 ; delaytime = 2 * inverter-delay + and-gate-delay
 
 ;;  * _ Exercise 3.30
+
+(define ripple-carry-adder
+  ... )
+
 ; Delay time for 1 half adder = 
 ; DSHA = and + greater of (and + inverter, or)
 ; DCHA = and
@@ -755,4 +759,57 @@ w        ; => (a b c d)
     (adder a b u)
     (multiplier 0.5 u c)
     'ok))
+
+;;  *_ Exercise 3.34
+
+; The squarer whch results will properly set b to a^2 if a is set, however it won't be 
+;  reversible, which is a necessary requirement for this constraint-based programming.
+; It won't be reversible because when determining a, the other divisor (a) won't be defined.
+
+;;  * _ Exercise 3.35
+
+(define (squarer a b)
+  (define (process-new-value)
+    (if (has-value? b)
+        (if (< (get-value b) 0)
+            (error "square less than 0 -- SQUARER" (get-value b))
+            (begin
+	      (set-value! a (sqrt b))
+	      me))
+        (if (has-value? a)
+	    (begin
+	      (set-value! b (* a a))
+	      me))))
+  (define (process-forget-value)
+    (forget-value! b me)
+    (forget-value! a me)
+    (process-new-value))
+  (define (me request)
+    (cond ((eq? request 'I-have-a-value)
+	   (process-new-value))
+	  ((eq? request 'I-lost-my-value)
+	   (process-forget-value))
+	  (else
+	   (error "Unknown request -- SQUARER" request))))
+  (connect a me)
+  (connect b me)
+  me)
+
+;;  * _ Exercise 3.36
+; global -> |--------------------------------------------------------------------------|
+;           | b                                                                        |
+;           | a--------|                                                               |
+;           |          |                                                               |
+;           |----------|---------------------------------------------------------------|
+;                      |  E1->|----------------------------------------|      
+;                      |      | newval = 10, constraints = ()          |
+;                      |      | *                                      |
+;                      |      |----------------------------------------|
+;                      |         |
+;                     ()()-------|
+; 
+; a contains a reference to an environment in which for-each-except runs
+; The * in the above diagram indicates where
+; Since constraints are still none, nothing meaningful will be done here in this case.
+
 
