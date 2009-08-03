@@ -755,9 +755,11 @@ w        ; => (a b c d)
 ;;  * _ Exercise 3.33
 
 (define (averager a b c)
-  (let ((u (make-connector)))
-    (adder a b u)
-    (multiplier 0.5 u c)
+  (let ((absum (make-connector))
+       ((two (make-connector))))
+    (adder a b absum)
+    (multiplier two c absum)
+    (constant 2 two)
     'ok))
 
 ;;  *_ Exercise 3.34
