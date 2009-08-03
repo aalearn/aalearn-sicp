@@ -814,4 +814,23 @@ w        ; => (a b c d)
 ; The * in the above diagram indicates where
 ; Since constraints are still none, nothing meaningful will be done here in this case.
 
+;;  * _ Exercise 3.37
+(define (c- x y)
+  (let ((z (make-connector)))
+    (adder y z x)
+    z))
 
+(define (c* x y)
+  (let ((z (make-connector)))
+    (multiplier x y z)
+    z))
+
+(define (c/ x y)
+  (let ((z (make-connector)))
+    (multiplier y z x)
+    z))
+
+(define (cv c)
+  (let ((z (make-connector)))
+    (constant c z)
+    z))
