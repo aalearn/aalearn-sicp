@@ -736,3 +736,23 @@ w        ; => (a b c d)
 ; If we don't run proc, we will never add that first action to the agenda, and propagating
 ;  will never add any further actions to the agenda.
 
+;;  * _ Exercise 3.32
+
+; We store a queue of items for each time segment, and we can operate that queue in two ways --
+;  either FIFO (first in, first out) or LIFO (last in, first out).
+; As per the hint, examine an and-gate whose inputs change from 0,1 to 1,0 in the same segment.
+; Under LIFO, we would run the action-procedure in the following sequence:
+;  Change in a2 from 0->1 would create an agenda item to set output signal to 1
+;  Change in a1 from 1->0 would create an agenda item to set output signal to 0
+;  Under LIFO, after the delay, first we would set the output to 0, then we set output to 1
+;   which is the incorrect final result at the end of the time segment.
+; Under FIFO, we set the output to 1 first, then 0, giving the correct final result.
+
+;;  * _ Exercise 3.33
+
+(define (averager a b c)
+  (let ((u (make-connector)))
+    (adder a b u)
+    (multiplier 0.5 u c)
+    'ok))
+
