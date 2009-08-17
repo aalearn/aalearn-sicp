@@ -839,6 +839,7 @@ w        ; => (a b c d)
 ;;  * _ Exercise 3.38
 ; a. all possible values for balance:
 ; Pe, Pa, Ma: 45
+; Pe, Ma, Pa: 35
 ; Pa, Pe, Ma: 45
 ; Pa, Ma, Pe: 50
 ; Ma, Pa, Pe: 40
