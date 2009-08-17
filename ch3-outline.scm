@@ -913,7 +913,19 @@ w        ; => (a b c d)
 ;;  * _ Exercise 3.47
 ; a. a semaphore in terms of mutexes
 (define (make-semaphore n)
-  (let (
+  (define (semaphore-list m)
+    (if (= m 0) 
+	() 
+	(cons (make-mutex) (semaphore-list (- m 1)))))
+  (define (search-list l)
+    (if (caar l)
+	(search-list (cdr l))
+  (let ((cells (semaphore-list n)))
+    (define (the-semaphore m)
+      (cond ((eq? m 'acquire)
+	     ()))
+; ...unfinished
+
 
 
 ; b.... unfinished
@@ -959,4 +971,12 @@ w        ; => (a b c d)
 
 ;;  * _ Exercise 3.49
 
-; Define a procedure which finds the next smallest account number
+; Define a procedure which, given an account A, finds the account closest in balance to it B,
+;  and takes one dollar from B and adds it to A.  In this case, you can't use the same procedure
+;  of finding the lower numbered one first, because you actually have to check the balance of A
+;  before you know which account to look for, and if you expect the behavior to be consistent
+;  you might createa deadlock where another process performing the same procedure locks B and then
+;  attempts to get a lock on A.
+
+
+
