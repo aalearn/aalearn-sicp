@@ -776,11 +776,11 @@ w        ; => (a b c d)
         (if (< (get-value b) 0)
             (error "square less than 0 -- SQUARER" (get-value b))
             (begin
-	      (set-value! a (sqrt b))
+	      (set-value! a (sqrt (get-value b)))
 	      me))
         (if (has-value? a)
 	    (begin
-	      (set-value! b (* a a))
+	      (set-value! b (square (get-value a)))
 	      me))))
   (define (process-forget-value)
     (forget-value! b me)
@@ -834,3 +834,129 @@ w        ; => (a b c d)
   (let ((z (make-connector)))
     (constant c z)
     z))
+
+;; * _ Section 3.4
+;;  * _ Exercise 3.38
+; a. all possible values for balance:
+; Pe, Pa, Ma: 45
+; Pa, Pe, Ma: 45
+; Pa, Ma, Pe: 50
+; Ma, Pa, Pe: 40
+; Ma, Pe, Pa: 40
+; b. if processes can be interleaved:
+; Pe-access, Pa-access, Pe-set, Ma-access, Ma-set, Pa-set: 80
+; Pe-access, Pe-set, Ma-access, Pa-access, Pa-set, Ma-set: 55
+; Pa-access, Pa-set, Ma-access, Pe-access, Ma-set, Pe-set: 90
+; Note, many more possibilities exist, especially considering that Ma-access
+; can be broken up into two different accesses.
+
+;;  * _ Exercise 3.39
+; a = (s (lambda () (* x x)))
+; b = set! x
+; c = (lambda () (set! x (+ x 1)))
+; (a, b, c) -> 101
+; (a, c, b) -> 100
+; (c, b, a) -> 121
+
+;;  * _ Exercise 3.40
+; a = (set! x (* x x))   = a-set, a1, a2
+; b = (set! x (* x x x)) = b-set, b1, b2, b3
+; a, b -> 10^6
+; b, a -> 10^6
+; a1, a2, b1, b2, b3, a-set, b-set -> 10^3
+; a1, a2, b1, b2, b3, b-set, a-set -> 10^2
+; a1, a2, b1, a-set, b2, b3, b-set -> 10^5
+; a1, a2, b1, b2, a-set, b3, b-set -> 10^4
+; several other ways to get 10^4
+; If we serialize, only the 10^6 outcome remains.
+
+;;  * _ Exercise 3.41
+; Do not agree, access to the bank balance is already 'atomic' and can't on its own cause anomalous behavior.
+
+;;  * _ Exercise 3.42
+; Constructed protected versions might introduce one issue, depending on how it is implemented (the below
+; implementation does seem to have this problem) -- two calls to withdraw won't actually be serialized separately;
+; they will be able to run concurrently since they are calls to the same serialized procedure.
+
+;;  * _ Exercise 3.43
+; If all processes are run sequentially, any given operation leaves 10, 20, and 30 (in some order) as the value
+;  the three accounts.  So running many operations will still maintain this, by induction.
+; If we have two exchanges happening concurrently, e1 (on 1 and 2), e2 (on 1 and 3):,
+;  e1-acc-1-access, e1-acc-2-access, e2-acc-1-access, e2-acc-3-access, e1-set-acc-1, e1-set-acc-2, e2-set-acc-1, e2-set-acc-3
+;  e1: 10, 20 -> diff=-10,              set-acc-1 to 20, set-acc-2 to 10
+;                    e2: 10, 30 -> diff=-20,                           set-acc-1 to 40, set-acc-3 to 10
+; This results in 40, 10, 10.  You'll note that as long as the withdraws and deposits are serialized,
+;  every call to exchange must have a net-zero impact on the accounts, it adds to one account exactly the same amount
+;  it withdraws from another.  So the sum will always be the same.
+; If withdraw/deposit are not serialized then the "withdraw -20" on acc-1 in e2 above could be broken down so 
+;  that it looks at the balance of account 1 when it's still 10, then in the background it gets set to 20 by a different
+;  procedure, then e2 would set it to 30 instead of 40.  Then the account balances would be 30, 10, 10, and money has
+;  been lost.
+ 
+;;  * _ Exercise 3.44
+; The transfer method works adequately because 'withdaw and 'deposit are already themselves serialized
+;  and since the amount is specified as a number, no problems arise from concurrent processes between a read
+;  and a write to the same balance.  The difference between this and the exchange problem is that in order
+;  for the exchange to work, it needs to read an account balance, then write to an account balance -- reads
+;  and writes, when not serialized, may cause unexpected behavior.
+
+;;  * _ Exercise 3.45
+; Looks as if in this case if you call serialized-exchange, we'll run a serialized procedure inside of another 
+;  serialized procedure that is acting on the same account.  This could cause a deadlock.
+
+;;  * _ Exercise 3.46
+; In this sequence, both instances of test-and-set acquire a mutex, so the mutex is not truly
+;  performing its stated purpose:
+; tas1: (if (car cell)) => #f     -> (set-car! cell true) 
+; tas2:    (if (car cell) => #f                          -> (set-car! cell true)
+
+;;  * _ Exercise 3.47
+; a. a semaphore in terms of mutexes
+(define (make-semaphore n)
+  (let (
+
+
+; b.... unfinished
+
+;;  * _ Exercise 3.48
+; A system where the smaller-number-account is protected first solves the exchange problem because two different
+;  processes will either acquire a lock, and then proceed to acquire the remainder of the locks or fail when 
+;  trying to acquire the first lock.  Therefore, you never have multiple processes which concurrently hold
+;  locks on some resoruce, and therefore you cannot have a deadlock created by exchange processes.
+
+(define (make-account-and-serializer balance number)
+  (define (withdraw amount)
+    (if (>= balance amount)
+        (begin (set! balance (- balance amount))
+               balance)
+        "Insufficient funds"))
+  (define (deposit amount)
+    (set! balance (+ balance amount))
+    balance)
+  (let ((balance-serializer (make-serializer)))
+    (define (dispatch m)
+      (cond ((eq? m 'withdraw) withdraw)
+            ((eq? m 'deposit) deposit)
+            ((eq? m 'balance) balance)
+	    ((eq? m 'number) number)
+            ((eq? m 'serializer) balance-serializer)
+            (else (error "Unknown request -- MAKE-ACCOUNT"
+                         m))))
+    dispatch))
+
+(define (serialized-exchange account1 account2)
+  (if (< (account1 'number) (account2 'number))
+      (let ((serializer1 (account1 'serializer))
+	    (serializer2 (account2 'serializer)))
+	((serializer1 (serializer2 exchange))
+	 account1
+	 account2))
+      (let ((serializer2 (account2 'serializer))
+	    (serializer1 (account1 'serializer)))
+	((serializer2 (serializer1 exchange))
+	 account1
+	 account2))))
+
+;;  * _ Exercise 3.49
+
+; Define a procedure which finds the next smallest account number
