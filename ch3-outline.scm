@@ -903,7 +903,7 @@ w        ; => (a b c d)
 
 ;;  * _ Exercise 3.45
 ; Looks as if in this case if you call serialized-exchange, we'll run a serialized procedure inside of another 
-;  serialized procedure that is acting on the same account.  This could cause a deadlock.
+;  serialized procedure that is acting on the same account.  This would cause a deadlock.
 
 ;;  * _ Exercise 3.46
 ; In this sequence, both instances of test-and-set acquire a mutex, so the mutex is not truly
@@ -914,22 +914,44 @@ w        ; => (a b c d)
 ;;  * _ Exercise 3.47
 ; a. a semaphore in terms of mutexes
 (define (make-semaphore n)
+  (let ((cells (list))
+	(semaphore-mutex (make-mutex)))
+    (define (the-semaphore m)
+      (semaphore-mutex 'acquire)
+      (cond ((eq? m 'acquire) 
+	     (if (< (length cells) n)
+		 (set! cells (cons (make-mutex) cells)))
+	     ((car cells) 'acquire))
+	    ((eq? m 'release)
+	     ((car cells) 'release)
+	     (set! cells (cdr cells))))
+      (semaphore-mutex 'release))
+    the-semaphore))
+
+; b. a semaphore in terms of atomic test-and-set! operations
+(define (make-semaphore n)
   (define (semaphore-list m)
     (if (= m 0) 
 	() 
-	(cons (make-mutex) (semaphore-list (- m 1)))))
-  (define (search-list l)
-    (if (caar l)
-	(search-list (cdr l))
+	(cons false (semaphore-list (- m 1)))))
+  (define (acquire-first-free l)
+    (if (test-and-set! (car l))
+	(if (null? (cdr l))
+	    (acquire-first-free l)
+	    (acquire-first-free (cdr l)))
+	false))
+  (define (release-one l)
+    ; this part probably doesn't work, since it's not atomic
+    ; not sure how to fix it
+    (if (car l)
+	(set-car! l false)
+	(release-one (cdr l))))
   (let ((cells (semaphore-list n)))
     (define (the-semaphore m)
-      (cond ((eq? m 'acquire)
-	     ()))
-; ...unfinished
+      (cond ((eq? m 'acquire) (acquire-first-free cells))
+	    ((eq? m 'release) (release-one cells))))
+    the-semaphore))
 
-
-
-; b.... unfinished
 
 ;;  * _ Exercise 3.48
 ; A system where the smaller-number-account is protected first solves the exchange problem because two different
@@ -981,3 +1003,225 @@ w        ; => (a b c d)
 
 
 
+;; * _ Section 3.5
+;;  * _ Exercise 3.50
+(define (stream-map proc . argstreams)
+  (if (stream-null? (car argstreams))
+      the-empty-stream
+      (cons-stream
+       (apply proc (map stream-car argstreams))
+       (apply stream-map
+              (cons proc (map stream-cdr argstreams))))))
+
+;;  * _ Exercise 3.51
+(define x (stream-map show (stream-enumerate-interval 0 10))) ; shows 0
+(stream-ref x 5) ; shows 0 - 5
+(stream-ref x 7) ; shows 6 - 7, since the previous ones have already been memoized
+
+;;  * _ Exercise 3.52
+; value of sum after each expression
+(define sum 0)            ; => 0
+(define (accum x)
+  (set! sum (+ x sum))
+  sum)                    ; => 0
+(define seq (stream-map accum (stream-enumerate-interval 1 20))) ; => 1
+(define y (stream-filter even? seq))                             ; => 6 = (+ 1..3)
+(define z (stream-filter (lambda (x) (= (remainder x 5) 0)) 
+                         seq))                                   ; => 10 = (+ 1..4)
+(stream-ref y 7)     ; => 136 = (1->4, 2->7, 3->8, 4->11, 5->12, 6->15, 7->16 => + 1..16)
+(display-stream z)   ; => 210 (adds to 20)
+; note that above I give the value 'sum', not the output or return values
+; since sum is returned after each call to accum, stream-ref will also return 136
+; display-stream will show all the interim sums that are divisible by 5, which are:
+; 10, 15, 45, 55, 105, 120, 190, 210 
+
+; These responses would have differed considerably if we had not memoized, since each
+; expression would restart the enumeration from 1, and we would increase sum with each
+; expression, even if we were evaluating elements we had seen before.
+
+;;  * _ Exercise 3.53
+; (1 2 4 8 16 ...)
+
+;;  * _ Exercise 3.54
+(define ones (cons-stream 1 ones))
+(define (add-streams s1 s2)
+  (stream-map + s1 s2))
+(define integers (cons-stream 1 (add-streams ones integers)))
+(define (mul-streams s1 s2)
+  (stream-map * s1 s2))
+(define factorials (cons-stream 1 (mul-streams (stream-cdr integers) factorials)))
+(stream-ref factorials 4) ; => 120 = n+1 factorial, as requested
+
+;;  * _ Exercise 3.55
+(define (partial-sums s)
+  (cons-stream (stream-car s) 
+	       (add-streams (partial-sums s) (stream-cdr s))))
+
+(display-stream (partial-sums (stream-enumerate-interval 1 5))) ; => 1 3 6 10 15
+
+;;  * _ Exercise 3.56
+(define (scale-stream stream factor)
+  (stream-map (lambda (x) (* x factor)) stream))
+(define (merge s1 s2)
+  (cond ((stream-null? s1) s2)
+        ((stream-null? s2) s1)
+        (else
+         (let ((s1car (stream-car s1))
+               (s2car (stream-car s2)))
+           (cond ((< s1car s2car)
+                  (cons-stream s1car (merge (stream-cdr s1) s2)))
+                 ((> s1car s2car)
+                  (cons-stream s2car (merge s1 (stream-cdr s2))))
+                 (else
+                  (cons-stream s1car
+                               (merge (stream-cdr s1)
+                                      (stream-cdr s2)))))))))
+(define S (cons-stream 1 (merge (scale-stream S 2) 
+				(merge (scale-stream S 3)
+				       (scale-stream S 5)))))
+; test it
+(define (test-display s start finish)
+  (display-stream 
+   (stream-map (lambda (x) 
+		 (stream-ref s x))
+	       (stream-enumerate-interval start finish))))
+(test-display S 20 25) ; => 40 45 48 50 54 60
+
+;;  * _ Exercise 3.57
+; the nth Fibonacci number (counting starting at 0) requires us to have n additions
+; If we did not memoize, we would be recomputing each addition for each element -- essentially 2^n additions
+
+;;  * _ Exercise 3.58
+(define (expand num den radix)
+  (cons-stream
+   (quotient (* num radix) den)
+   (expand (remainder (* num radix) den) den radix)))
+
+; This procedure performs long division in an arbitrary base, 
+;  returning the 'digits' in a stream.
+(expand 1 7 10) ; => should be 1 4 2 8 5 7 repeating
+(test-display (expand 1 7 10) 0 12) ; looks good!
+
+(expand 3 8 10) ; => should be 3 7 5 then 0s forever
+(test-display (expand 3 8 10) 0 12) ; looks good!
+
+;;  * _ Exercise 3.59
+; a. 
+(define (integrate-series s)
+  (mul-streams s (stream-map (lambda (x) (/ 1 x)) integers)))
+(test-display (integrate-series ones) 0 3) ; => 1 1/2 1/3 1/4
+
+; b.
+; deriv(cos) = -sin => cos = -integ(sin)
+(define cosine-series
+  (cons-stream 1 (scale-stream (integrate-series sine-series) -1)))
+(define sine-series
+  (cons-stream 0 (integrate-series cosine-series)))
+
+(test-display cosine-series 0 6) ; check
+(test-display sine-series 0 6)   ; check
+
+;;  * _ Exercise 3.60
+; take
+;  a0 + a1x + a2x^2 + ... = series a
+;  b0 + b1x + b2x^2 + ... = series b
+; then a * b =
+;  a0*b0 + (a1*b0 + b1*a0)x + (a2b0 + a1b1 + b2a0)x^2 ... ->
+;  a0*b0    a1*b0              a2*b0                 a3*b0 ...
+;           b1*a0              b2*a0                 b3*a0 ...
+;                              a1*b1                 a2*b1 ...
+;                                                    b2*a1 ...
+; collect all the a0 terms to the bottom ...
+(define (mul-series s1 s2)
+  (cons-stream (* (stream-car s1) (stream-car s2))
+	       (add-streams (mul-series (stream-cdr s1) s2)
+			    (scale-stream (stream-cdr s2) (stream-car s1)))))
+
+(test-display (mul-series ones ones) 0 6)         ; => 1 2 3 4 5 6 7
+(test-display (mul-series integers integers) 0 6) ; => 1 4 10 20 ...
+
+(test-display (add-streams (mul-series sine-series sine-series)
+			   (mul-series cosine-series cosine-series))
+	      0 8) ; => 1 0 0 0 0 ...
+; not easy!
+
+;;  * _ Exercise 3.61
+(define (invert-unit-series s)
+  (cons-stream 1 (scale-stream (mul-series (invert-unit-series s) (stream-cdr s)) -1)))
+
+(test-display (invert-unit-series integers) 0 9) ; => 1 -2 1 0 0 0 0 ...
+; does that really work? (1 + 2x + 3x^2 + 4x^3 + ...) * (1 - 2x + x^2) = 1 + 0 + 0 ... it does!
+(test-display (mul-series integers (invert-unit-series integers)) 0 9) ; => 1 0 0 0 ...
+
+;;  * _ Exercise 3.62
+(define (div-series s1 s2)
+  (if (= (stream-car s2) 0)
+      (error "Error -- Divisor series cannot have constant term of 0")
+      (let ((scale-factor (/ 1 (stream-car s2))))
+	(scale-stream 
+	 (mul-series s1 
+		     (invert-unit-series (scale-stream s2 scale-factor))) 
+	 scale-factor))))
+
+(test-display (div-series sine-series cosine-series) 0 7) ; => 0 1 0 1/3 0 2/15 0 17/315 check!
+
+;;  * _ Exercise 3.63
+; In the case of sqrt-stream, we're passing an argument into it, e.g. (sqrt-stream 2). This causes
+; the useful memoization to not operate.  Turning the stream into another variable (a procedure which
+; takes no arguments) means the memoization can occur as it did before.  If we skipped memoization,
+; the performance benefit of the local variable would go away.
+
+;;  * _ Exercise 3.64
+(define (average a b) (/ (+ a b) 2))
+(define (sqrt-improve guess x)
+  (average guess (/ x guess)))
+
+(define (sqrt-stream x)
+  (define guesses
+    (cons-stream 1.0
+                 (stream-map (lambda (guess)
+                               (sqrt-improve guess x))
+                             guesses)))
+  guesses)
+(test-display (sqrt-stream 2) 0 7)
+
+;;  * _ Exercise 3.65
+(define (stream-limit s tolerance)
+  (let ((s0 (stream-ref s 0))
+	(s1 (stream-ref s 1)))
+    (if (< (abs (- s1 s0)) tolerance)
+	s1
+	(stream-limit (stream-cdr s) tolerance))))
+
+(stream-limit (sqrt-stream 2) 0.1) ; => 1.41666
+
+;;  * _ Exercise 3.65
+(define ln-2-stream
+  (partial-sums (stream-map (lambda (x) (/ (if (even? x) -1.0 1.0) x)) integers)))
+
+(test-display ln-2-stream 0 5) ; check
+
+(log 2) ; => .6931471805599453
+(test-display ln-2-stream 0 8) ; => .7456349206349207 (last value) (within 0.1)
+
+(define (euler-transform s)
+  (let ((s0 (stream-ref s 0))           ; Sn-1
+        (s1 (stream-ref s 1))           ; Sn
+        (s2 (stream-ref s 2)))          ; Sn+1
+    (cons-stream (- s2 (/ (square (- s2 s1))
+                          (+ s0 (* -2 s1) s2)))
+                 (euler-transform (stream-cdr s)))))
+
+(test-display (euler-transform ln-2-stream) 0 8) ; => .6932539682539683 (last value) (correct to 3 digits)
+
+(define (make-tableau transform s)
+  (cons-stream s
+               (make-tableau transform
+                             (transform s))))
+(define (accelerated-sequence transform s)
+  (stream-map stream-car
+              (make-tableau transform s)))
+
+(test-display (accelerated-sequence euler-transform ln-2-stream) 0 8) ; => .6931471805599427 (correct to 14 digits!)
+
+;;  * _ Exercise 3.66
