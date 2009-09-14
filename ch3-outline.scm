@@ -1017,6 +1017,7 @@ w        ; => (a b c d)
 (define x (stream-map show (stream-enumerate-interval 0 10))) ; shows 0
 (stream-ref x 5) ; shows 0 - 5
 (stream-ref x 7) ; shows 6 - 7, since the previous ones have already been memoized
+; above includes only the "displayed" section, the return values should be x, 5, 7 respectively
 
 ;;  * _ Exercise 3.52
 ; value of sum after each expression
@@ -1057,6 +1058,12 @@ w        ; => (a b c d)
   (cons-stream (stream-car s) 
 	       (add-streams (partial-sums s) (stream-cdr s))))
 
+; inimino's version below avoids re-calculation at every step 
+;  need to avoid using the (partial-sums s) stream, since it won't get memoized properly
+(define (partial-sums s)
+  (define stream (cons-stream 0 (add-streams s stream)))
+  (stream-cdr stream))
+
 (display-stream (partial-sums (stream-enumerate-interval 1 5))) ; => 1 3 6 10 15
 
 ;;  * _ Exercise 3.56
@@ -1080,6 +1087,17 @@ w        ; => (a b c d)
 				(merge (scale-stream S 3)
 				       (scale-stream S 5)))))
 ; test it
+(define (stream-enumerate-interval low high)
+  (if (> low high)
+      the-empty-stream
+      (cons-stream
+       low
+       (stream-enumerate-interval (+ low 1) high))))
+(define (display-stream s)
+  (stream-for-each display-line s))
+(define (display-line x)
+  (newline)
+  (display x))
 (define (test-display s start finish)
   (display-stream 
    (stream-map (lambda (x) 
@@ -1089,7 +1107,7 @@ w        ; => (a b c d)
 
 ;;  * _ Exercise 3.57
 ; the nth Fibonacci number (counting starting at 0) requires us to have n additions
-; If we did not memoize, we would be recomputing each addition for each element -- essentially 2^n additions
+; If we did not memoize, we would be recomputing each addition for each element -- O(2^n) additions
 
 ;;  * _ Exercise 3.58
 (define (expand num den radix)
@@ -1153,6 +1171,8 @@ w        ; => (a b c d)
 ; does that really work? (1 + 2x + 3x^2 + 4x^3 + ...) * (1 - 2x + x^2) = 1 + 0 + 0 ... it does!
 (test-display (mul-series integers (invert-unit-series integers)) 0 9) ; => 1 0 0 0 ...
 
+; to make more efficient, make memoizable by including internal define
+
 ;;  * _ Exercise 3.62
 (define (div-series s1 s2)
   (if (= (stream-car s2) 0)
@@ -1163,7 +1183,7 @@ w        ; => (a b c d)
 		     (invert-unit-series (scale-stream s2 scale-factor))) 
 	 scale-factor))))
 
-(test-display (div-series sine-series cosine-series) 0 7) ; => 0 1 0 1/3 0 2/15 0 17/315 check!
+(test-display (div-series (scale-stream sine-series 1/5) (scale-stream cosine-series 1/5)) 0 7) ; => 0 1 0 1/3 0 2/15 0 17/315 check!
 
 ;;  * _ Exercise 3.63
 ; In the case of sqrt-stream, we're passing an argument into it, e.g. (sqrt-stream 2). This causes
@@ -1185,7 +1205,6 @@ w        ; => (a b c d)
   guesses)
 (test-display (sqrt-stream 2) 0 7)
 
-;;  * _ Exercise 3.65
 (define (stream-limit s tolerance)
   (let ((s0 (stream-ref s 0))
 	(s1 (stream-ref s 1)))
@@ -1225,3 +1244,128 @@ w        ; => (a b c d)
 (test-display (accelerated-sequence euler-transform ln-2-stream) 0 8) ; => .6931471805599427 (correct to 14 digits!)
 
 ;;  * _ Exercise 3.66
+; After picking the first elements of the lists (1 1), the pairs function interleaves all pairs of the form (1 n)
+; with the remainder of the pairs needed, which means, which in turn means (2 n) interleaved with the remainder.
+; Following this pattern, you'll notice that (1 100) will have 99 items before it of the form (1 n) and 98 items
+; before it not of the form (1 n), so 197 total items. To go further, writing out some examples
+; 1-1 1-2 2-2 1-3 2-3 1-4 3-3 1-5 2-4 1-6 3-4 1-7 2-5 1-8 4-4 1-9 
+; 0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15
+; Look at just where pairs beginning with m start (# of pairs before them)
+; m=1 -> 0, 2 -> 2, 3 -> 6, 4 -> 14
+; => pairs before (m m) = 2^m - 2
+; => pairs before (m m+1) = 2^m - 2+2^(m-1)
+; => pairs before (m p) = 2^m - 2 + (p - m)*2^(m-1) = 2^(m-1)*(2 + p - m) - 2 
+; => pairs before (99 100) = 3 * 2^98 - 2
+;  & pairs before (100 100) = 2^100 - 2
+
+;;  * _ Exercise 3.67
+(define (interleave s1 s2)
+  (if (stream-null? s1)
+      s2
+      (cons-stream (stream-car s1)
+                   (interleave s2 (stream-cdr s1)))))
+
+(define (pairs s t)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (interleave
+    (stream-map (lambda (x) (list x (stream-car t))) 
+		(stream-cdr s))
+    (interleave
+     (stream-map (lambda (x) (list (stream-car s) x))
+		 (stream-cdr t))
+     (pairs (stream-cdr s) (stream-cdr t))))))
+
+(test-display (pairs integers integers) 0 20) ; works
+
+;;  * _ Exercise 3.68
+; This stream never yields a first element, since when we inteleave pairs.
+
+;;  * _ Exercise 3.69
+(define (pairs s t)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (interleave
+    (stream-map (lambda (x) (list (stream-car s) x))
+                (stream-cdr t))
+    (pairs (stream-cdr s) (stream-cdr t)))))
+(define (triples s t u)
+  (cons-stream
+   (list (stream-car s) (stream-car t) (stream-car u))  ; i = j = k
+   (interleave
+    (interleave
+     (stream-map (lambda (x) (list (stream-car s) (stream-car t) x))
+		 (stream-cdr u))                        ; i = j <= k
+     (stream-map (lambda (x) (cons (stream-car s) x))
+                (pairs (stream-cdr t) (stream-cdr u)))) ; i < j <= k
+    (triples (stream-cdr s) (stream-cdr t) (stream-cdr u)))))
+
+(test-display (triples integers integers integers) 0 20) ; => looks okay
+
+(define pythagorean-triples
+  (stream-filter (lambda (x) (= (+ (square (car x)) (square (cadr x))) (square (caddr x))))
+		 (triples integers integers integers)))
+
+;;  * _ Exercise 3.70
+(define (merge-weighted s1 s2 weight)
+  (cond ((stream-null? s1) s2)
+        ((stream-null? s2) s1)
+        (else
+         (let ((s1car (stream-car s1))
+               (s2car (stream-car s2)))
+           (if (< (weight s1car) (weight s2car))
+	       (cons-stream s1car (merge-weighted (stream-cdr s1) s2 weight))
+               (cons-stream s2car (merge-weighted s1 (stream-cdr s2) weight)))))))
+
+(define (weighted-pairs s t weight)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (merge-weighted
+    (stream-map (lambda (x) (list (stream-car s) x))
+                (stream-cdr t))
+    (weighted-pairs (stream-cdr s) (stream-cdr t) weight)
+    weight)))
+
+; a
+(define pos-by-sum (weighted-pairs integers integers (lambda (x) (+ (car x) (cadr x)))))
+(test-display pos-by-sum 0 10)
+
+; b
+(define (indivisible-by-2-3-5 x)
+  (not
+   (or
+    (= 0 (remainder x 2))
+    (= 0 (remainder x 3))
+    (= 0 (remainder x 5)))))
+(define (both x y test)
+  (and (test x) (test y)))
+(define pos-by-formula 
+  (stream-filter (lambda (x) (both (car x) (cadr x) indivisible-by-2-3-5))
+		 (weighted-pairs integers integers
+				 (lambda (x)
+				   (let ((i (car x))
+					 (j (cadr x)))
+				     (+
+				      (* 2 i)
+				      (* 3 j)
+				      (* 5 i j)))))))
+
+(test-display pos-by-formula 0 16)
+
+;;  * _ Exercise 3.71
+(define (cube x) (* x x x))
+(define (sum-cubes pair)
+  (+ (cube (car pair)) (cube (cadr pair))))
+
+(define (dupes s)
+  (if (= (stream-car s) (stream-car (stream-cdr s)))
+      (stream-car s)
+      (dupes (stream-cdr s))))
+
+(define ramanujan-numbers
+  (dupes 
+   (stream-map sum-cubes
+	       (weighted-pairs integers integers sum-cubes))))
+
+
+(test-display ramanujan-numbers 0 2)
