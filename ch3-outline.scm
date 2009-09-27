@@ -1359,8 +1359,10 @@ w        ; => (a b c d)
 
 (define (dupes s)
   (if (= (stream-car s) (stream-car (stream-cdr s)))
-      (stream-car s)
+      (cons-stream (stream-car s) (dupes (stream-cdr s)))
       (dupes (stream-cdr s))))
+
+(test-display (dupes ones) 0 2)
 
 (define ramanujan-numbers
   (dupes 
@@ -1368,4 +1370,228 @@ w        ; => (a b c d)
 	       (weighted-pairs integers integers sum-cubes))))
 
 
-(test-display ramanujan-numbers 0 2)
+(test-display ramanujan-numbers 0 5)
+; 1729
+; 4104
+; 13832
+; 20683
+; 32832
+; 39312
+
+;;  * _ Exercise 3.72
+(define (sum-squares pair)
+  (+ (square (car pair)) (square (cadr pair))))
+(define (three-in-a-row s)
+  (if (= (stream-car s) (stream-ref s 1) (stream-ref s 2))
+      (cons-stream (stream-car s) (three-in-a-row (stream-cdr s)))
+      (three-in-a-row (stream-cdr s))))
+
+(define ramanujan-square-triples
+  (three-in-a-row
+   (stream-map sum-squares
+	       (weighted-pairs integers integers sum-squares))))
+(test-display ramanujan-square-triples 0 5)
+; 325
+; 425
+; 650
+; 725
+; 845
+; 850
+
+;;  * _ Exercise 3.73
+(define (RC r c dt)
+  (define (voltages i-stream v0)
+    (define inner
+      (cons-stream v0
+		   (add-streams (scale-stream i-stream (/ dt C))
+				inner)))
+    (define include-resistance
+      (add-streams inner (scale-stream i-stream r)))
+    include-resistances)
+  voltages)
+
+;;  * _ Exercise 3.74
+(define (sign-change-detector next prev)
+  (cond ((and (< prev 0) (>= next 0)) 1)
+	((and (>= prev 0) (< next 0)) -1)
+	(else 0)))
+
+(sign-change-detector -4 2)  ; => -1
+(sign-change-detector -4 -2) ; => 0
+(sign-change-detector -4 0)  ; => -1
+(sign-change-detector 4 -1)  ; => 1
+(sign-change-detector 4 0)   ; => 0
+
+; Alyssa's version -- from book	
+(define (make-zero-crossings input-stream last-value)
+  (cons-stream
+   (sign-change-detector (stream-car input-stream) last-value)
+   (make-zero-crossings (stream-cdr input-stream)
+                        (stream-car input-stream))))
+
+(define sense-data (cons-stream -1 (cons-stream 4 (cons-stream 3 (cons-stream -2 sense-data)))))
+(define zero-crossings (make-zero-crossings sense-data 0))
+(test-display zero-crossings 0 4) ; => -1, 1, 0, -1, 0
+
+; Eva's version
+(define zero-crossings
+  (stream-map sign-change-detector sense-data (cons-stream 0 sense-data)))
+(test-display zero-crossings 0 4) ; => -1, 1, 0, -1, 0
+
+
+;;  * _ Exercise 3.75
+; Louis's version computes the current average by averaging the current value with the previous
+; average.  Instead it should compute the average using the previous value.  Fixed here:
+(define (make-zero-crossings input-stream last-value last-avg)
+  (let ((avpt (/ (+ (stream-car input-stream) last-value) 2)))
+    (cons-stream (sign-change-detector avpt last-avg)
+                 (make-zero-crossings (stream-cdr input-stream)
+                                      (stream-car input-stream)
+				      avpt))))
+
+
+;;  * _ Exercise 3.76
+(define (smooth stream)
+  (define (average x y) (/ (+ x y) 2)) 
+  (define smoothed
+    (stream-map average stream (stream-cdr stream)))
+  smoothed)
+
+(test-display (smooth sense-data) 0 5) ; => 3/2, 7/2, 1/2, -3/2  ...
+
+
+;;  * _ Exercise 3.77
+; from book
+(define (integral delayed-integrand initial-value dt)
+  (define int
+    (cons-stream initial-value
+                 (let ((integrand (force delayed-integrand)))
+                   (add-streams (scale-stream integrand dt)
+                                int))))
+  int)
+(define (solve f y0 dt)
+  (define y (integral (delay dy) y0 dt))
+  (define dy (stream-map f y))
+  y)
+
+(stream-ref (solve (lambda (y) y) 1 0.001) 1000)
+
+; exercise -- modify alternate version of integral to accept delayed argument
+(define (integral delayed-integrand initial-value dt)
+  (cons-stream initial-value
+	       (let ((integrand (force delayed-integrand)))
+		 (if (stream-null? integrand)
+		     the-empty-stream
+		     (integral (delay (stream-cdr integrand))
+			       (+ (* dt (stream-car integrand))
+				  initial-value)
+			       dt)))))
+
+(stream-ref (solve (lambda (y) y) 1 0.001) 1000) ; =>  2.716923932235896
+
+;;  * _ Exercise 3.78
+(define (solve-2nd a b y0 dy0 dt)
+  (define y (integral (delay dy) y0 dt))
+  (define dy (integral (delay ddy) dy0 dt))
+  (define ddy (add-streams
+	       (scale-stream dy a)
+	       (scale-stream y b)))
+  y)
+
+; consider tracking down an example...
+
+;;  * _ Exercise 3.79
+(define (solve-2nd f y0 dy0 dt)
+  (define y (integral (delay dy) y0 dt))
+  (define dy (integral (delay ddy) dy0 dt))
+  (define ddy (stream-map f dy y))
+  y)
+
+;;  * _ Exercise 3.80
+(define (RLC R L C dt)
+  (define (states-stream vC0 iL0)
+    (define vC-stream
+      (cons-stream vC0
+		   (scale-stream
+		    (integral (delay iL-stream) 0 dt)
+		    (/ -1 C))))
+    (define iL-stream
+      (cons-stream iL0
+		   (add-streams 
+		    (scale-stream (integral (delay vC-stream) 0 dt) (/ 1 L))
+		    (scale-stream (integral (delay iL-stream) 0 dt) (- (/ R L))))))
+    (stream-map cons vC-stream iL-stream))
+  states-stream)
+
+(define sample-RLC (RLC 1 1 0.2 0.1))
+(test-display (sample-RLC 10 0) 0 5) 
+ 
+; (10 . 0)
+; (0 . 0)
+; (0 . 1.)
+; (0 . 1.)
+; (-.5 . .9)
+; (-1. . .8)
+; check if correct
+
+;;  * _ Exercise 3.81
+(define random-numbers
+  (cons-stream random-init
+               (stream-map rand-update random-numbers)))
+
+(define (random-generator request-stream)
+  (define (inner-stream requests stream-in-use)
+    (let ((stream-to-use
+	   (cond ((eq? (stream-car requests) 'generate) stream-in-use)
+		 ((eq? (stream-car requests) 'reset) random-numbers) 
+		 (else (error "Cannot understand request")))))
+      (cons-stream (stream-car stream-to-use)
+		   (inner-stream (stream-cdr requests) (stream-cdr stream-to-use)))))
+  (define the-stream (inner-stream request-stream random-numbers))
+  the-stream)
+
+(define sample-request-stream 
+  (cons-stream 'generate (cons-stream 'generate (cons-stream 'reset sample-request-stream))))
+
+(test-display sample-request-stream 0 10) ; => gen, gen, res, gen, gen, res ...
+(test-display random-numbers 0 10) ; => 19, 18, 6, 17, 25 ... (based on test generator above)
+
+(test-display (random-generator sample-request-stream) 0 10) ; => 19, 18, 19, 18, 6, 19, 18, 6 ...
+
+
+;;  * _ Exercise 3.82
+(define (random-in-range low high)
+  (let ((range (- high low)))
+    (+ low (random range))))
+(define (random-stream low high)
+  (define inner-stream
+    (cons-stream (random-in-range low high)
+		 (random-stream low high)))
+  inner-stream)
+(test-display (random-stream 0 1000) 0 10) ; => looks ok
+
+; not done yet...
+(define (monte-carlo trials experiment)
+  (define (iter trials-remaining trials-passed)
+    (cond ((= trials-remaining 0)
+           (/ trials-passed trials))
+          ((experiment)
+           (iter (- trials-remaining 1) (+ trials-passed 1)))
+          (else
+           (iter (- trials-remaining 1) trials-passed))))
+  (iter trials 0))
+
+(define (estimate-integral p x1 x2 y1 y2 trials)
+  (*
+   (- x2 x1) 
+   (- y2 y1)
+   (monte-carlo trials 
+		(lambda () (p (random-in-range x1 x2)
+			      (random-in-range y1 y2))))))
+
+; use this to estimate pi
+(define (test-circle-p x y)
+  (<= (+ (square x) (square y)) 1.0))
+
+(estimate-integral test-circle-p -1.0 1.0 -1.0 1.0 100000) ; => 3.1362
+
