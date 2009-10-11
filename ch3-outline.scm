@@ -1568,30 +1568,36 @@ w        ; => (a b c d)
     (cons-stream (random-in-range low high)
 		 (random-stream low high)))
   inner-stream)
-(test-display (random-stream 0 1000) 0 10) ; => looks ok
+(test-display (random-stream 0 100.0) 0 10) ; => looks ok
 
-; not done yet...
-(define (monte-carlo trials experiment)
-  (define (iter trials-remaining trials-passed)
-    (cond ((= trials-remaining 0)
-           (/ trials-passed trials))
-          ((experiment)
-           (iter (- trials-remaining 1) (+ trials-passed 1)))
-          (else
-           (iter (- trials-remaining 1) trials-passed))))
-  (iter trials 0))
+(define (map-successive-pairs f s)
+  (cons-stream
+   (f (stream-car s) (stream-car (stream-cdr s)))
+   (map-successive-pairs f (stream-cdr (stream-cdr s)))))
 
-(define (estimate-integral p x1 x2 y1 y2 trials)
-  (*
-   (- x2 x1) 
-   (- y2 y1)
-   (monte-carlo trials 
-		(lambda () (p (random-in-range x1 x2)
-			      (random-in-range y1 y2))))))
+(define (monte-carlo experiment-stream passed failed)
+  (define (next passed failed)
+    (cons-stream
+     (/ passed (+ passed failed))
+     (monte-carlo
+      (stream-cdr experiment-stream) passed failed)))
+  (if (stream-car experiment-stream)
+      (next (+ passed 1) failed)
+      (next passed (+ failed 1))))
 
-; use this to estimate pi
-(define (test-circle-p x y)
+
+(define (estimate-integral p x1 x2 y1 y2)
+  (scale-stream
+   (monte-carlo
+    (stream-map p (random-stream x1 x2) (random-stream y1 y2))
+    0 0)
+   (* (- x2 x1) (- y2 y1))))
+
+(define (test-circle x y)
   (<= (+ (square x) (square y)) 1.0))
 
-(estimate-integral test-circle-p -1.0 1.0 -1.0 1.0 100000) ; => 3.1362
+(define pi
+  (estimate-integral test-circle -1.0 1.0 -1.0 1.0))
+
+(test-display pi 1500 1510) ; => 3.1422899 -- getting there 
 
