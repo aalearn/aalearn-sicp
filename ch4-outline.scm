@@ -73,21 +73,23 @@
 (define (and->if exp)
   (expand-and (and-exps exp)))
 (define (expand-and exps)
-  (if (null? clauses)
-      'true
-      (make-if (car exps)
-	       (expand-and (cdr exps))
-	       'false)))
+  (let ((clauses (and-exps exp)))
+    (if (null? clauses)
+	'true
+	(make-if (car clauses)
+	       (expand-and (cons 'and (cdr clauses)))
+	       'false))))
 
 (define or-exps cdr)
 (define (or->if exp)
   (expand-or (or-exps exp)))
 (define (expand-or exps)
-  (if (null? clauses)
-      'false
-      (make-if (car exps)
+  (let ((clauses (or-exps exp)))
+    (if (null? clauses)
+	'false
+	(make-if (car clauses)
 	       'true
-	       (expand-or (cdr exps)))))
+	       (expand-or (cons 'or (cdr clauses)))))))
 
 
 ;;  * _ Exercise 4.5
