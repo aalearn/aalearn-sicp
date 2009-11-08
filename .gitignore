@@ -1,0 +1,8 @@
+\#*
+.DS_Store
+Aquamacs Manual.pdf
+Release Notes 1.6.pdf
+*.scm~
+link_to
+link_to_files/
+

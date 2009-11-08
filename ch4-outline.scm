@@ -91,6 +91,9 @@
 	       'true
 	       (expand-or (cons 'or (cdr clauses)))))))
 
+; note: these should return the relevant VALUES when true, not just 'true
+;  this creates interesting issues in the case of or-if, where if we use a derived-form,
+;  it looks like we have to evaluate something twice
 
 ;;  * _ Exercise 4.5
 (define (arrow-form? actions) (eq? '=> (car actions)))
@@ -108,10 +111,12 @@
                        clauses))
             (make-if (cond-predicate first)
 		     (if (arrow-form? (cond-actions first))
-			 ((recipient (cond-actions first)) (cond-predicate first))
+			 (cons (recipient (cond-actions first)) (cond-predicate first))
 			 (sequence->exp (cond-actions first)))
                      (expand-clauses rest))))))
 ; unsure if cond-predicate will pass correctly to recipient there
+
+; note that (cond-predicate first) gets eval'd twice -- that's not how cond should work!
 
 
 ;;  * _ Exercise 4.6
@@ -312,4 +317,192 @@
 			      (delete-head! vals))))
 
 ;;  * _ Exercise 4.14
+; If the system version of map is itself implemented as a primitive, Louis's version should work.
+; Since it does not, we can conclude that the system version is based on other functions, such as
+; car, cdr, cons, and apply.  Since apply is not a primitive in our interpreter, the system version
+; of map will use the system version of apply instead of our version, which will lead to incompatibilities.
+
+;;  * _ Exercise 4.15
+; The halting problem! First assume that halts? works and (halts? try try) returns true or false
+; If (halts? try try) => true, then, inside (try try), the if condition is true, and the function
+;  run-forever is triggered.  This means that (try try) does not halt, and therefore the return value
+;  of (halts? try try) was inaccurate.
+; If (halts? try try) => false, then the if will choose the else branch and halt, and therefore
+;  once again, (halts? try try) returns an inaccurate result.
+; Therefore any implementation of halts? can be shown to fail on this implementation of try try.
+
+
+;;  * _ Exercise 4.16
+
+; a.  Change lookup-variable-value to signal an error if the value it finds is the symbol *unassigned*.
+(define (lookup-variable-value var env)
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ((null? vars)
+             (env-loop (enclosing-environment env)))
+            ((eq? var (car vars))
+             (if (eq? (car vals) '*unassigned*)
+		 (error var " is *unassigned*")
+		 (car vals)))
+            (else (scan (cdr vars) (cdr vals)))))
+    (if (eq? env the-empty-environment)
+        (error "Unbound variable" var)
+        (let ((frame (first-frame env)))
+          (scan (frame-variables frame)
+                (frame-values frame)))))
+  (env-loop env))
+
+; b.  Write a procedure scan-out-defines that takes a procedure body and returns an equivalent one that has no internal definitions, by making the transformation described above.
+(define (make-assignment var val)
+  (list 'set! var val))
+
+(define (scan-out-defines body)
+  (let ((defines (filter definition? body))
+	(non-defines (filter (lambda (x) (not (definition? x))) body)))
+    (make-let 
+     (map (lambda (x) (list (definition-variable x) '*unassigned*)) defines)
+     (append
+      (map (lambda (x) (make-assignment (definition-variable x) (definition-value x))) defines)
+      non-defines))))
+
+; c.  Install scan-out-defines in the interpreter, either in make-procedure or in procedure-body. Which place is better? Why? 
+; make-procedure will involve this being run less often, so it's better
+(define (make-procedure parameters body env)
+  (list 'procedure parameters (scan-out-defines body) env))
+
+
+;;  * _ Exercise 4.17
+; The diagram itself is uninteresting.  As question notes, an additional frame/environment is created
+;  by introducing the let, which is transformed into a lambda.  Since the additional inner frame includes
+;  everything other than the definitions, and the definitions themselves can have no side effects in this
+;  frame, a correct program will run exactly as before, despite one additional environment in play.
+; There are some other odd side effects, however.  For example:
+(define (x y)
+  (+ y 1)
+  (define (a) 7))
+; This function ill-advisedly makes use of the return value of the definition as its return value.  This will
+;  break after the rewrite above.
+
+; If we tolerate this sort of problem and some additional limitations, we can also rewrite the function to 
+; mimic "simultaneous" scope rules by filtering out definitions & moving them to the beginning of the body.
+
+;;  * _ Exercise 4.18
+; applying this transformation to solve, this is what happens:
+(lambda (f y0 dt)
+  (let ((y '*unassigned*)
+        (dy '*unassigned*))
+    (let ((a (integral (delay dy) y0 dt))
+          (b (stream-map f y)))
+      (set! y a)
+      (set! dy b))
+    y))
+; In the inner let, a and b will execute their code immediately; b will immediately call stream-map,
+;  but since y is still *unassigned*, we will see an error.
+
+; Now look at the version in the text, applied to solve
+(lambda (f y0 dt)
+  (let ((y '*unassigned*)
+        (dy '*unassigned*))
+    (set! y (integral (delay dy) y0 dt))
+    (set! dy (stream-map f y))
+    y))
+; No such problem in this case; this should work correctly.
+
+;;  * _ Exercise 4.19
+; The idea of simultaneous and scope-level definition is best, so Eva's answer of 20 seems best.
+; We could implement this as follows:
+;  - As in the text, initially assign a and b to *unassigned*.
+;  - When evaluating a and b, instead of erroring when you hit *unassigned*, defer additional processing
+;    and move on to the next definition.
+;  - If you have circular definitions, then create an error.
+;  - Otherwise you have evaluated all definitions in the order they are needed, e.g. in the example in 4.19,
+;    you will evaluate a first, then b finishes evaluating, then (+ a b), giving the answer of 20.
+
+;;  * _ Exercise 4.20
+; a. Implement letrec as a derived expression
+(define letrec-assignments cadr)
+(define letrec-body cddr)
+(define letrec-assignment-var car)
+(define letrec-assignment-val cadr)
+
+(define (letrec->let exp)
+  (make-let
+   (map (lambda (x) (list let-rec-assignment-var '*unassigned)) 
+	(letrec-assignments exp))
+   (append
+    (map (lambda (x) (make-assignment (letrec-assignment-var x) (letrec-assignment-val x))) 
+	 (letrec-assignments exp))
+    (letrec-body exp))))
+
+; b. Diagrams to illustrate difference between letrec and let:
+;  letrec:
+;  ____________________________
+; | global                     |
+; |____________________________| 
+;               ___________________________
+;              | even? odd? = *unassigned* |
+;              |___________________________|  <-\
+;                    _______________________________________
+;                   | set! changes even?, odd? to lambdas   |
+;                   | body runs here                        |
+;                   |_______________________________________|
+;
+;  let:
+;  ____________________________
+; | global                     |
+; |____________________________| 
+;                    ____________________________________________
+;                   | even? odd? = lambdas                       |
+;                   |  but even?, odd? not defined in parent env |
+;                   | body runs here                             |
+;                   |____________________________________________|
+;
+; Not very clearly illustrated by my diagrams, but in the "let" case, even and odd
+;  are mapped to lambdas but the lambdas refer to even? and odd? in the parent evironment
+;  where they are undefined.
 ; 
+; In the letrec case, we set even and odd in the environment they will execute and
+;  when they execute, they will find the definitions of those functions
+
+
+;;  * _ Exercise 4.21
+; a.
+(define (fact n)
+  (if (= n 1) 1 (* n (fact (- n 1)))))
+(fact 10) ; => 3628800 
+
+((lambda (n)
+   ((lambda (fact)
+      (fact fact n))
+    (lambda (ft k)
+      (if (= k 1)
+          1
+          (* k (ft ft (- k 1)))))))
+ 10) ; => 3628800 check!
+
+
+(define (fib n)
+  (if (< n 3) 1 (+ (fib (- n 1)) (fib (- n 2)))))
+(fib 10) ; => 55
+
+((lambda (n)
+   ((lambda (fib)
+      (fib fib n))
+    (lambda (fb k)
+      (if (< k 3)
+          1
+          (+ (fb fb (- k 2)) (fb fb (- k 1)))))))
+ 10) ; => 55 check!
+
+; b.
+(define (f x)
+  ((lambda (even? odd?)
+     (even? even? odd? x))
+   (lambda (ev? od? n)
+     (if (= n 0) true (od? ev? od? (- n 1))))
+   (lambda (ev? od? n)
+     (if (= n 0) false (ev? ev? od? (- n 1))))))
+(f 19) ; => #f check!
+(f 20) ; => #t check!
+
+;
