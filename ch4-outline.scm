@@ -505,4 +505,20 @@
 (f 19) ; => #f check!
 (f 20) ; => #t check!
 
-;
+;;  * _ Exercise 4.22
+; if we extend the analyze to understand lets...
+; ((let? exp) (analyze-let exp))
+; ... then we just need the following
+(define (analyze-let exp)  
+  (let ((var-procs (map analyze (map let-assignment-var (let-assignments exp))))
+	(bproc (analyze-sequence (let-body exp))))
+    (lambda (env) (execute-application 
+		   (make-procedure vars bproc env)
+		   var-procs))))
+; not sure about this one
+
+;;  * _ Exercise 4.23
+; not done!
+
+;;  * _ Exercise 4.24
+; skipped!
