@@ -562,13 +562,30 @@
 (define w (id (id 10)))
 count  ; => Value: 0; original definition
 w      ; => 10
-count  ; => 1; memoization means that the set is called once
+count  ; => 2; since each call to id, when forced, will increment count
 
 
 ;;  * _ Exercise 4.28
 ; example of something where the operator needs to be forced:
-;  the operator must be the result of something that is 
+;  the operator must be the result of something that is auto-converted to a thunk
 (define operators (car cdr cadr))
 (define a-list (list 0 1 2 3 4))
 ((cadr operators) a-list)
+
+;;  * _ Exercise 4.29
+; versions of fibonacci are longer without memoization
+; if + is not a primitive operator, then our basic version will be very long
+; if it is, we can compute some similar function, just for demonstration purposes
+; which works as:
+(define (plus x y) (+ x y))
+(define (fib n) (if (< n 2) 1 (plus (fib (- n 1) (- n 2)))))
+
+(define (square x)
+  (* x x))
+(square (id 10)) ; => 100
+count ; => 1 with memoization, 2 if not
+
+
+;;  * _ Exercise 4.30
+
 
