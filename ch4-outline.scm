@@ -428,7 +428,7 @@
 
 (define (letrec->let exp)
   (make-let
-   (map (lambda (x) (list let-rec-assignment-var '*unassigned)) 
+   (map (lambda (x) (list (let-rec-assignment-var x) '*unassigned)) 
 	(letrec-assignments exp))
    (append
     (map (lambda (x) (make-assignment (letrec-assignment-var x) (letrec-assignment-val x))) 
@@ -517,6 +517,7 @@
 		   (make-procedure vars bproc env)
 		   (map (lamda (p) (p env) var-procs))))))
 ; not sure about this one
+; get this one working in the meta-circular evaluator!
 
 ;;  * _ Exercise 4.23
 ; In a 1-expression body, Alyssa's version will analyze that expression ahead of time
@@ -565,4 +566,9 @@ count  ; => 1; memoization means that the set is called once
 
 
 ;;  * _ Exercise 4.28
+; example of something where the operator needs to be forced:
+;  the operator must be the result of something that is 
+(define operators (car cdr cadr))
+(define a-list (list 0 1 2 3 4))
+((cadr operators) a-list)
 
