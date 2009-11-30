@@ -257,9 +257,10 @@
 (define (frame-variables frame) (map car frame))
 (define (frame-values frame) (map cdr frame))
 (define (add-binding-to-frame! var val frame)
-  (set-cdr! frame frame)
+  (set-cdr! frame (cons (car frame) (cdr frame)))
   (set-car! frame (cons var val)))
 
+; inimino pointed out that (set-cdr! frame frame) creates an infinite-loop! -- fixed above
 ; check if set-variable-value! and define-variable! work fine -- probably they don't
 
 ;;  * _ Exercise 4.12
@@ -514,11 +515,54 @@
 	(bproc (analyze-sequence (let-body exp))))
     (lambda (env) (execute-application 
 		   (make-procedure vars bproc env)
-		   var-procs))))
+		   (map (lamda (p) (p env) var-procs))))))
 ; not sure about this one
 
 ;;  * _ Exercise 4.23
-; not done!
+; In a 1-expression body, Alyssa's version will analyze that expression ahead of time
+;  and when actually evaluated, execute-sequence gets called, the first branch of the cond
+;  is true, and we quickly go to run the single expression.  The text's version is similar
+;  except that cdr procs does not need to be checked at execution time.
+; In a 2-expression body, Alyssa's version needs to continually check the length of the
+;  expressions in the body during execution time, and it is therefore doing a lot more work
+;  at execution time than the text's version.
 
 ;;  * _ Exercise 4.24
 ; skipped!
+
+;;  * _ Exercise 4.25
+; In applicative order code, this will not work, since every call to unless will attempt to
+;  evaluate all arguments, including the recursive call to factorial, so the program will
+;  recurse infinitely.
+; In a normal order language, yes, the function will work as desired.
+
+
+;;  * _ Exercise 4.26
+(define unless-condition cadr)
+(define unless-usual-value caddr)
+(define unless-exception-value cadddr)
+
+(define (unless->if exp)
+  (make-if (unless-condition exp)
+	   (unless-exception-value exp)
+	   (unless-usual-value exp)))
+
+; Unless might be useful as a procedure when passed in as an argument, e.g. to map...
+(map unless possible-error-conditions regular-values exception-values)
+
+
+;;  * _ Exercise 4.27
+; give following to lazy evaluator input...
+(define count 0)
+(define (id x)
+  (set! count (+ count 1))
+  x)
+
+(define w (id (id 10)))
+count  ; => Value: 0; original definition
+w      ; => 10
+count  ; => 1; memoization means that the set is called once
+
+
+;;  * _ Exercise 4.28
+
