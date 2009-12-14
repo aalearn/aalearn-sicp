@@ -628,6 +628,10 @@ count ; => 1 with memoization, 2 if not
 
 (define (text-of-quotation exp) (list->new-style-list (cadr exp)))
 
+; problematic use of "cons" here, in that it uses the cons-in-underlying-scheme
+;  need to use cons-using-procedures, which much specifically be implemented
+;  in the interpreter.
+
 ;;  * _ Exercise 4.34
 ; not sure how to install this in user-print
 ; one way to handle most cases is to simply set a  max for the number of items we will handle
@@ -661,6 +665,65 @@ count ; => 1 with memoization, 2 if not
 ; the equality; we're just iterating over i and j, and adding the "high" requirement on k using hsq.
 
 
+;;  * _ Exercise 4.38
+(define (multiple-dwelling)
+  (let ((baker (amb 1 2 3 4 5))
+        (cooper (amb 1 2 3 4 5))
+        (fletcher (amb 1 2 3 4 5))
+        (miller (amb 1 2 3 4 5))
+        (smith (amb 1 2 3 4 5)))
+    (require
+     (distinct? (list baker cooper fletcher miller smith)))
+    (require (not (= baker 5)))
+    (require (not (= cooper 1)))
+    (require (not (= fletcher 5)))
+    (require (not (= fletcher 1)))
+    (require (> miller cooper))
+;    (require (not (= (abs (- smith fletcher)) 1)))
+    (require (not (= (abs (- fletcher cooper)) 1)))
+    (list (list 'baker baker)
+          (list 'cooper cooper)
+          (list 'fletcher fletcher)
+          (list 'miller miller)
+          (list 'smith smith))))
 
+; This version has the original solution,
+;  (smith cooper baker fletcher miller) + 3 more
+;  (smith fletcher baker cooper miller)
+;  (baker fletcher smith cooper miller)
+;  (baker cooper smith fletcher miller)
 
+;;  * _ Exercise 4.39
+; The order does not affect the answer but if the most restrictive clauses are earlier,
+; then we would make the program run faster by excluding more cases up front.
+; Moving (require (> miller cooper)) up will speed things along slightly.
+
+;;  * _ Exercise 4.40
+; Before the distinct requirement, there are 5^5 possible answers
+; After the distinct requirement, there are 5! or 120 possible answers. 
+(define (multiple-dwelling)
+  (let ((fletcher (amb 1 2 3 4 5)))
+    (require (not (= fletcher 5)))
+    (require (not (= fletcher 1)))
+    (let ((cooper (amb 1 2 3 4 5)))
+      (require (not (= cooper 1)))
+      (require (not (= fletcher cooper)))
+      (require (not (= (abs (- fletcher cooper)) 1)))
+      (let ((smith (amb 1 2 3 4 5)))
+	(require (distinct? (list cooper fletcher smith)))
+	(require (not (= (abs (- smith fletcher)) 1)))
+	(let ((miller (amb 1 2 3 4 5)))
+	  (require (distinct? (list cooper fletcher miller smith)))
+	  (require (> miller cooper))
+	  (let ((baker (amb 1 2 3 4 5)))
+	    (require (distinct? (list baker cooper fletcher miller smith)))
+	    (require (not (= baker 5)))
+	    (list (list 'baker baker)
+		  (list 'cooper cooper)
+		  (list 'fletcher fletcher)
+		  (list 'miller miller)
+		  (list 'smith smith))))))))
+
+;;  * _ Exercise 4.41
+; One solution is to attack this similar to the queens problem...
 
