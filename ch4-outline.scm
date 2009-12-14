@@ -578,7 +578,7 @@ count  ; => 2; since each call to id, when forced, will increment count
 ; if it is, we can compute some similar function, just for demonstration purposes
 ; which works as:
 (define (plus x y) (+ x y))
-(define (fib n) (if (< n 2) 1 (plus (fib (- n 1) (- n 2)))))
+(define (fib n) (if (< n 2) 1 (plus (fib (- n 1)) (fib (- n 2)))))
 
 (define (square x)
   (* x x))
@@ -587,5 +587,80 @@ count ; => 1 with memoization, 2 if not
 
 
 ;;  * _ Exercise 4.30
+
+; not sure about this one!
+
+; a. print and newline are primitives, so they are executed rather than deferred.
+; b. 
+; Have we given printing the special property where it is executed, rather than deferred?
+; If so, that would explain it.
+
+; with original interpreter, 
+; (p1 1) => 1
+; (p2 1) => 1
+
+; with the new interpreter
+; (p1 1) => (1 2)
+; (p2 1) => (1 2)
+
+; c. Since the primitive procedures are getting forced anyway, Cy's recoding of eval-sequence
+;  will run the code exactly as before.
+
+; d. Cy's approach seems like the appropriate one to handle sequences, though reducing usage of sequences
+;   makes the point less important.
+
+;;  * _ Exercise 4.31
+; skipped for now
+
+;;  * _ Exercise 4.32
+; In exercise 3.51-52, constructing the stream evaluates the head immediately, and if there are side effects
+; (such as printing), the printing will happen when the stream is constructed; it may be more useful to have 
+; it print when the stream is actively being accessed.
+
+; As pointed out in footnote 4.31, if stream elements are themselves streams, it can be useful to have these
+; lazier lists to create lazy trees and other more complex data structures.
+
+;;  * _ Exercise 4.33
+(define (list->new-style-list items)
+  (if (null? items)
+      '()
+      (cons (car items) (list->new-style-list (cdr items)))))
+
+(define (text-of-quotation exp) (list->new-style-list (cadr exp)))
+
+;;  * _ Exercise 4.34
+; not sure how to install this in user-print
+; one way to handle most cases is to simply set a  max for the number of items we will handle
+(define (user-print-pair pair)
+  (define (print-item pair n)
+    (cond ((null? item) '.)
+	  ((= n 0) '...)
+	  (else (display (car pair))
+		(display " ")
+		(print-item (cdr pair) (- n 1)))))
+  (print-item pair 3))
+
+;;  * _ Exercise 4.35
+; range is interpreted as inclusive of bounds
+(define (an-integer-between low high)
+  (require (not (> low high)))
+  (amb low (an-integer-between (+ low 1) high)))
+
+;;  * _ Exercise 4.36
+; an-integer-starting-from would increase one of the numbers arbitrarily without ever increasing the other two
+; This solution uses observation that i^2 + j^2 < (i+j)^2
+(define (a-pythagorean-triple-above low)
+  (let ((i (an-integer-starting-from low)))
+    (let ((j (an-integer-between low i)))
+      (let ((k (an-integer-between i (+ i j))))
+        (require (= (+ (* i i) (* j j)) (* k k)))
+        (list i j k)))))
+
+;;  * _ Exercise 4.37
+; Ben's example does seem like an improvement, since we don't have to iterate over all k's to check
+; the equality; we're just iterating over i and j, and adding the "high" requirement on k using hsq.
+
+
+
 
 

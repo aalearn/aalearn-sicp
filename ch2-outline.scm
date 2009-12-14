@@ -440,6 +440,7 @@
 	      (cons (car items) recurse)
 	      recurse))))
   (cons first (iter rest)))
+
 ; inimino
 (define (same-parity x . ys)
   (cons x (same-parity-list x ys)))
@@ -461,6 +462,18 @@
 
 (same-parity 1 2 3 4 5 6 7)
 (same-parity 2 3 4 5 6 7)
+
+; revised
+(define (same-parity first . rest)
+  (define (match-parity? x)
+    (= (remainder first 2) (remainder x 2)))
+  (define (filter-parity items)
+    (let ((rest (filter-parity (cdr items))))
+      (cond ((= (length items) 0) ())
+	    ((match-parity? (car items)) (cons (car items) rest))
+	    rest)))
+  (cons first (filter-parity rest)))
+
 
 ;;  * _ Exercise 2.21
 (define (square-list items)
