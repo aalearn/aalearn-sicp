@@ -679,7 +679,6 @@ count ; => 1 with memoization, 2 if not
     (require (not (= fletcher 5)))
     (require (not (= fletcher 1)))
     (require (> miller cooper))
-;    (require (not (= (abs (- smith fletcher)) 1)))
     (require (not (= (abs (- fletcher cooper)) 1)))
     (list (list 'baker baker)
           (list 'cooper cooper)
@@ -687,8 +686,14 @@ count ; => 1 with memoization, 2 if not
           (list 'miller miller)
           (list 'smith smith))))
 
+(define (distinct? items)
+  (cond ((null? items) true)
+        ((null? (cdr items)) true)
+        ((member (car items) (cdr items)) false)
+        (else (distinct? (cdr items)))))
 ; This version has the original solution,
-;  (smith cooper baker fletcher miller) + 3 more
+;  (smith cooper baker fletcher miller) + 4 more
+;  (baker cooper miller fletcher smith)
 ;  (smith fletcher baker cooper miller)
 ;  (baker fletcher smith cooper miller)
 ;  (baker cooper smith fletcher miller)
@@ -726,4 +731,361 @@ count ; => 1 with memoization, 2 if not
 
 ;;  * _ Exercise 4.41
 ; One solution is to attack this similar to the queens problem...
+
+(define (enumerate-interval low high)
+  (if (> low high)
+      nil
+      (cons low (enumerate-interval (+ low 1) high))))
+
+(define (yank index items)
+  (define (inner n head tail)
+    (if (> n 0)
+	(inner (- n 1) (append head (list (car tail))) (cdr tail))
+	(append head (cdr tail))))
+  (inner index '() items))
+
+(define (permutations items)
+  (if (null? items)
+      (list '())
+      (flatmap (lambda (i)
+		 (map (lambda (x) (cons (list-ref items i) x))
+		      (permutations (yank i items))))
+	       (enumerate-interval 0 (- (length items) 1)))))
+
+(define (old-style-multiple-dwelling)
+  (define (allowed? baker cooper fletcher miller smith)
+    (and (not (= baker 5))
+	 (not (= cooper 1))
+	 (and (not (= fletcher 5)) (not (= fletcher 1)))
+	 (> miller cooper)
+	 (not (= (abs (- smith fletcher)) 1))
+	 (not (= (abs (- fletcher cooper)) 1))))
+  (define (with-names solutions)
+    (map (lambda (sol) 
+	   (apply (lambda (baker cooper fletcher miller smith) 
+		    (list
+		     (list 'baker baker)
+		     (list 'cooper cooper)
+		     (list 'fletcher fletcher)
+		     (list 'miller miller)
+		     (list 'smith smith)))
+		  sol))
+	 solutions))	
+  (with-names 
+   (filter (lambda (x) (apply allowed? x))
+	   (permutations (enumerate-interval 1 5)))))
+
+(old-style-multiple-dwelling) ; => ((baker 3) (cooper 2) (fletcher 4) (miller 5) (smith 1))
+
+;;  * _ Exercise 4.42
+
+; lots of useful utility functions
+(define (map proc items)
+  (if (null? items)
+      '()
+      (cons (proc (car items))
+            (map proc (cdr items)))))
+(define (or a b)
+  (if a true (if b true false)))
+(define (and a b)
+  (if a (if b true false) false))
+(define (xor a b)
+  (or (and a (not b)) (and (not a) b)))
+(define (cadr x) (car (cdr x)))
+
+(define (one-true-and-one-untrue items)
+  (xor (car items) (cadr items)))
+
+(define (schoolgirls-placement)
+  (let ((betty (amb 1 2 3 4 5))
+	(ethel (amb 1 2 3 4 5))
+	(joan  (amb 1 2 3 4 5))
+	(kitty (amb 1 2 3 4 4))
+	(mary  (amb 1 2 3 4 5)))
+    (require
+     (distinct? (list betty ethel joan kitty mary)))
+    (map (lambda (letter)
+	   (require (one-true-and-one-untrue letter)))
+	 (list
+	  (list (= kitty 2) (= betty 3))
+	  (list (= ethel 1) (= joan 2))
+	  (list (= joan 3) (= ethel 5))
+	  (list (= kitty 2) (= mary 4))
+	  (list (= mary 4) (= betty 1))))
+    (list (list 'betty betty)
+          (list 'ethel ethel)
+          (list 'joan joan)
+          (list 'kitty kitty)
+          (list 'mary mary))))
+
+(schoolgirls-placement) ; => ((betty 3) (ethel 5) (joan 2) (kitty 1) (mary 4))
+
+;;  * _ Exercise 4.43
+(define (yacht-names)
+  (define (yacht-of-named father name)
+    (require (not (eq? name father))))
+  (define (father dad name)
+    (require (eq? dad name)))
+
+  ; (father 'mr-moore mary-ann)
+  ; (yacht-named 'colonel-downing melissa) <- l
+
+  ; var's value = father's name
+  (let ((mary-ann "Mr. Moore")
+	(melissa "Sir Barnacle Hood")
+	(rosalind (amb "Colonel Downing" "Mr. Hall" "Dr. Parker")))
+    (yacht-of-named "Mr. Hall" rosalind)
+    (let ((lorna (amb "Colonel Downing" "Mr. Hall" "Dr. Parker")))
+      (yacht-of-named "Mr. Moore" lorna)
+      (let ((gabrielle (amb "Colonel Downing" "Mr. Hall" "Dr. Parker")))
+	(yacht-of-named gabrielle "Dr. Parker")
+	(require (distinct? (list rosalind lorna gabrielle)))
+	(list rosalind lorna gabrielle)))))
+
+
+(define (caar x) (car (car x)))
+(define (cadr x) (car (cdr x))) 
+(define (cadar x) (car (cdr (car x))))
+(define (lookup object items)
+  (if (null? items)
+      false
+      (if (eq? (caar items) object)
+	  (cadar items)
+	  (lookup object (cdr items)))))
+(define (amb-detect proc items)
+  (if (null? items)
+      (amb) ; hack ?
+      (if (proc (car items))
+	  (car items)
+	  (amb-detect proc (cdr items)))))
+
+(define (yacht-club-daughters)
+  (define (father-of daughter) (lookup 'father daughter))
+  (define (yacht-of father) (lookup 'yacht father))
+  (define (name-of person) (lookup 'name person))
+  (define (fathers-yacht-matches-name? daughter)
+    (eq? (name-of daughter) (yacht-of (father-of daughter))))
+  (define (daughter-of father all-daughters) 
+    (amb-detect (lambda (x) (eq? father (father-of x))) all-daughters))
+
+  (let ((mr-moore '((name mr-moore) (yacht lorna)))
+	(sir-barnacle '((name sir-barnacle) (yacht gabrielle)))
+	(mr-hall '((name mr-hall) (yacht rosalind)))
+	(colonel-downing '((name colonel-downing) (yacht melissa)))
+	(dr-parker '((name dr-parker) (yacht mary-anne)))) ; by elimination
+
+    (let ((mary-anne (list '(name mary-anne) (list 'father mr-moore)))
+	  (melissa (list '(name melissa) (list 'father sir-barnacle)))
+	  (gabrielle (list '(name gabrielle)
+			   (list 'father (amb mr-hall colonel-downing dr-parker)))))
+      (require (not (fathers-yacht-matches-name? gabrielle)))
+      (let ((lorna (list '(name lorna)
+			   (list 'father (amb mr-hall colonel-downing dr-parker)))))
+	(require (not (fathers-yacht-matches-name? lorna)))
+	(require (not (eq? (father-of lorna) (father-of gabrielle))))
+	(let ((rosalind (list '(name rosalind)
+			      (list 'father (amb mr-hall colonel-downing dr-parker)))))
+	  (require (not (fathers-yacht-matches-name? rosalind)))
+	  (require (not (eq? (father-of rosalind) (father-of gabrielle))))
+	  (require (not (eq? (father-of rosalind) (father-of lorna))))
+	  (require 
+	   (eq? (yacht-of (father-of gabrielle))
+		(name-of
+		 (daughter-of dr-parker 
+			      (list mary-anne melissa gabrielle lorna rosalind)))))
+	  (father-of lorna))))))
+
+(yacht-club-daughters) ; => ((name colonel-downing) (yacht melissa)) and no more values
+
+
+(define (yacht-club-daughters-without-moore)
+  (define (father-of daughter) (lookup 'father daughter))
+  (define (yacht-of father) (lookup 'yacht father))
+  (define (name-of person) (lookup 'name person))
+  (define (fathers-yacht-matches-name? daughter)
+    (eq? (name-of daughter) (yacht-of (father-of daughter))))
+  (define (daughter-of father all-daughters) 
+    (amb-detect (lambda (x) (eq? father (father-of x))) all-daughters))
+
+  (let ((mr-moore '((name mr-moore) (yacht lorna)))
+	(sir-barnacle '((name sir-barnacle) (yacht gabrielle)))
+	(mr-hall '((name mr-hall) (yacht rosalind)))
+	(colonel-downing '((name colonel-downing) (yacht melissa)))
+	(dr-parker '((name dr-parker) (yacht mary-anne)))) ; by elimination
+
+    ; changed line for mary-anne, also add mr-moore to other daughters
+    (let ((mary-anne (list (list 'name 'mary-anne) 
+			   (list 'father (amb mr-hall colonel-downing dr-parker mr-moore))))
+	  (melissa (list (list 'name 'melissa) (list 'father sir-barnacle)))
+	  (gabrielle (list (list 'name 'gabrielle)
+			   (list 'father (amb mr-hall colonel-downing dr-parker mr-moore)))))
+      (require (not (fathers-yacht-matches-name? gabrielle)))
+      (require (not (eq? (father-of mary-anne) (father-of gabrielle))))
+
+      (let ((lorna (list (list 'name 'lorna)
+			 (list 'father (amb mr-hall colonel-downing dr-parker mr-moore)))))
+	(require (not (fathers-yacht-matches-name? lorna)))
+        ; add these extra distinct clauses to make sure dads differ
+	(require (distinct? (map father-of (list mary-anne gabrielle lorna))))
+	(let ((rosalind (list (list 'name 'rosalind)
+			      (list 'father (amb mr-hall colonel-downing dr-parker mr-moore)))))
+	  (require (not (fathers-yacht-matches-name? rosalind)))
+	  (require (distinct? (map father-of (list mary-anne gabrielle lorna rosalind))))
+	  (require 
+	   (eq? (yacht-of (father-of gabrielle))
+		(name-of
+		 (daughter-of dr-parker 
+			      (list mary-anne melissa gabrielle lorna rosalind)))))
+	  (father-of lorna))))))
+
+(yacht-club-daughters-without-moore) ; => solutions
+; ((name dr-parker) (yacht mary-anne))
+; ((name colonel-downing) (yacht melissa))
+; that's it
+
+
+;;  * _ Exercise 4.44
+(define (length items)
+  (define (inner n items)
+    (if (null? items)
+	n
+	(inner (+ n 1) (cdr items))))
+  (inner 0 items))
+(length (list 1 2 3 4)) ; => 4
+
+(define (filter proc items)
+  (cond ((null? items) '())
+	((proc (car items)) (cons (car items) (filter proc (cdr items))))
+	(else (filter proc (cdr items)))))
+
+(filter (lambda (x) (> x 4)) (list 1 9 3 6 5 2)) ; => (9 6 5)
+      
+(define (queens board-size)
+  (define (safe? positions)
+    (define (same-row? x y)
+      (= (cadr x) (cadr y)))
+    (define (same-diagonal? x y)
+      (= (abs (- (car x) (car y))) 
+	 (abs (- (cadr x) (cadr y)))))
+    (= 0 (length
+	  (filter (lambda (y)
+		    (or (same-row? (car positions) y)
+			(same-diagonal? (car positions) y)))
+		  (cdr positions)))))
+
+
+  (define (amb-enumerate n)
+    (if (= n 1)
+	(amb n)
+	(amb n (amb-enumerate (- n 1)))))
+
+  ; this seems pretty inefficient
+  (define (safe-queens n)
+    (if (= n 0)
+	'()
+	(let ((my-queens (cons (list n (amb-enumerate board-size)) (safe-queens (- n 1)))))
+	  (require (safe? my-queens))
+	  my-queens)))
+  (safe-queens board-size))
+
+(queens 4) ; =>
+; ((4 3) (3 1) (2 4) (1 2))
+; ((4 2) (3 4) (2 1) (1 3))
+; and that's it (looks right)
+
+(queens 5) ; => takes several seconds for first answer?
+(queens 6) ; => takes a few minutes
+; pretty inefficient, are there better ways to do it?
+
+
+;;  * _ Exercise 4.45
+
+; Five parses of "The professor lectures to the student in the class with the cat."
+; 1. 
+(sentence (noun-phrase (simple-noun-phrase (article the) (noun professor))) 
+	  (verb-phrase 
+	   (verb-phrase
+	    (verb-phrase
+	     (verb lectures) 
+	     (prep-phrase (prep to) (simple-noun-phrase (article the)
+							(noun student))))
+	    (prep-phrase (prep in) (simple-noun-phrase (article the)
+						       (noun class))))
+	   (prep-phrase (prep with) (simple-noun-phrase (article the)
+							(noun cat)))))
+; In other words, the target of the lecture is a student, and the lecturing is 
+; happening in a class, and the lecture is accompanied by a cat. 
+; 2. a noun-phrase wraps "student" and "in the class":
+; In other words, the student is in the class, and the lecture is accompanied by a cat.
+; 3. a noun-phrase wraps "class" and "with the cat"
+; In other words, the lecture is to the student, and the lecture is happening in a
+; class which has a cat in it.
+; 4. a noun-phrase wraps "student in the class with a cat" and a noun-phrase also wraps 
+; "class with a cat", meaning the lecture is to the the student, the student is in the 
+; class, and the class has a cat in it.
+; 5. a noun-phrase wraps "student in the class with a cat" is wrapped in a noun-phrase,
+; meaning that the student is in the class, and the student is also with a cat.
+
+;;  * _ Exercise 4.46
+
+; Some parts of the grammar are potentially infinitely recursive.  We need our program
+; to terminate in these cases by not checking the infinite versions, for example,
+; (verb-phrase (verb-phrase (verb-phrase ... ))).  We do that by ensuring that the infinite
+; recursion cannot happen without swallowing words, and that in turn can be accomplished
+; by ensuring that the "word-swallowing" part of the code happens first.
+
+;;  * _ Exercise 4.47
+
+; Louis's version will infinitely recurse without "swallowing words", which happens 
+; when parse-word is called.
+;
+; Changing the order of the amb expressions will make this even worse,
+; since the infinite recursion will happen right away, without even a few parses
+; that are valid at first.
+
+
+;;  * _ Exercise 4.48
+; adjectives:
+(define adjectives '(adjective old young thrifty entitled brash))
+
+(define (parse-decorated-noun)
+  (amb (parse-word nouns)
+       (list 'decorated-noun
+	     (parse-word adjectives)
+	     (parse-decorated-noun))))
+
+(define (parse-simple-noun-phrase)
+  (list 'simple-noun-phrase
+        (parse-word articles)
+        (parse-decorated-noun)))
+
+(parse '(the professor lectures to the student with the cat))
+
+(parse '(the brash young professor lectures to the entitled student))
+
+; adverbs can be done very similarly
+
+
+;;  * _ Exercise 4.49
+
+; modified to generate instead of parse
+(define (parse-word word-list)
+  ; hacky way to ensure termination
+  (require (not (null? *unparsed*)))
+  (set! *unparsed* (cdr *unparsed*))
+
+  (define (amb-any words)
+    (cond ((null? words) (amb))
+	  ((= (length words) 1) (amb (car words)))
+	  (else (amb (car words) (amb-any (cdr words))))))
+  (list (car word-list) (amb-any (cdr word-list))))
+
+(parse-word nouns)
+
+(parse '(the professor lectures to the student with the cat))
+; => (sentence (simple-noun-phrase (article the) (noun student)) (verb-phrase (verb-phrase (verb studies) (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))) (prep-phrase (prep for) (simple-noun-phrase (article the) (noun student)))))
+; i.e. "the student studies for the student for the student"
+; try-again: "the student studies for the student for the professor"
+
+; This is probably not the solution desired by the text, given what's noted in the footnote.
 

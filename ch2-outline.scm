@@ -468,17 +468,17 @@
   (define (match-parity? x)
     (= (remainder first 2) (remainder x 2)))
   (define (filter-parity items)
-    (let ((rest (filter-parity (cdr items))))
+    (let ((extra (filter-parity (cdr items))))
       (cond ((= (length items) 0) ())
-	    ((match-parity? (car items)) (cons (car items) rest))
-	    rest)))
+	    ((match-parity? (car items)) (cons (car items) extra))
+	    extra)))
   (cons first (filter-parity rest)))
 
 
 ;;  * _ Exercise 2.21
 (define (square-list items)
   (if (null? items)
-      ()
+      '()
       (cons (square (car items)) (square-list (cdr items)))))
 
 (square-list (list 1 2 3 4)) ; => 1 4 9 16
