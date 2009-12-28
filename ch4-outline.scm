@@ -691,6 +691,7 @@ count ; => 1 with memoization, 2 if not
         ((null? (cdr items)) true)
         ((member (car items) (cdr items)) false)
         (else (distinct? (cdr items)))))
+
 ; This version has the original solution,
 ;  (smith cooper baker fletcher miller) + 4 more
 ;  (baker cooper miller fletcher smith)
@@ -980,13 +981,13 @@ count ; => 1 with memoization, 2 if not
 	(amb n (amb-enumerate (- n 1)))))
 
   ; this seems pretty inefficient
-  (define (safe-queens n)
+  (define (safe-queens n positions-so-far)
     (if (= n 0)
-	'()
-	(let ((my-queens (cons (list n (amb-enumerate board-size)) (safe-queens (- n 1)))))
+	positions-so-far
+	(let ((my-queens (cons (list n (amb-enumerate board-size)) positions-so-far)))
 	  (require (safe? my-queens))
-	  my-queens)))
-  (safe-queens board-size))
+	  (safe-queens (- n 1) my-queens))))
+  (safe-queens board-size '()))
 
 (queens 4) ; =>
 ; ((4 3) (3 1) (2 4) (1 2))
@@ -996,7 +997,7 @@ count ; => 1 with memoization, 2 if not
 (queens 5) ; => takes several seconds for first answer?
 (queens 6) ; => takes a few minutes
 ; pretty inefficient, are there better ways to do it?
-
+(queens 8)
 
 ;;  * _ Exercise 4.45
 
