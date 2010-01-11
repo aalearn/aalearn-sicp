@@ -1072,8 +1072,8 @@ count ; => 1 with memoization, 2 if not
 ; modified to generate instead of parse
 (define (parse-word word-list)
   ; hacky way to ensure termination
-  (require (not (null? *unparsed*)))
-  (set! *unparsed* (cdr *unparsed*))
+  ; (require (not (null? *unparsed*)))
+  ; (set! *unparsed* (cdr *unparsed*))
 
   (define (amb-any words)
     (cond ((null? words) (amb))
@@ -1090,3 +1090,78 @@ count ; => 1 with memoization, 2 if not
 
 ; This is probably not the solution desired by the text, given what's noted in the footnote.
 
+;;  * _ Exercise 4.50
+(define (ramb? exp) (tagged-list? exp 'ramb))
+(define (ramb-choices exp) (cdr exp))
+
+; add analyze clause:
+; ((ramb? exp) (analyze-ramb exp))
+
+; re-use "yank" from above
+
+(define (analyze-ramb exp)
+  (let ((cprocs (map analyze (ramb-choices exp))))
+    (lambda (env succeed fail)
+      (define (try-next choices)
+	(let ((index-to-try (random (length choices))))
+	  (if (null? choices)
+	      (fail)
+	      ((list-ref index-to-try choices) env
+                           succeed
+                           (lambda ()
+                             (try-next (yank index-to-try choices)))))))
+      (try-next cprocs))))
+
+
+
+;;  * _ Exercise 4.51
+; this one's really kind of trivial -- just remove the setting to old-var
+; from analyze permanent assigment
+(define (analyze-permanent-assignment exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze (assignment-value exp))))
+    (lambda (env succeed fail)
+      (vproc env
+             (lambda (val fail2)        ; *1*
+                 (set-variable-value! var val env)
+                 (succeed 'ok
+                          (lambda ()    ; *2*
+                            (fail2))))
+             fail))))
+
+; if we had used set! instead of permanent-set! we would expect:
+; (a b 1)
+; (a c 1)
+
+;;  * _ Exercise 4.52
+(define (if-fail? exp) (tagged-list? exp 'if-fail))
+(define (if-fail-try exp) (cadr exp))
+(define (if-fail-rescue exp) (caddr exp))
+
+(define (analyze-if-fail exp)
+  (let ((tproc (analyze (if-fail-try exp)))
+	(rproc (analyze (if-fail-rescue exp))))
+    (lambda (env succeed fail)
+      (tproc env
+	     (lambda (val fail2)
+	       (
+; not finished
+
+
+
+;;  * _ Exercise 4.53
+; the procedure should try all pairs before failing
+; (8 35) (3 110) (3 20) (1 110)
+
+;;  * _ Exercise 4.54
+(define (analyze-require exp)
+  (let ((pproc (analyze (require-predicate exp))))
+    (lambda (env succeed fail)
+      (pproc env
+             (lambda (pred-value fail2)
+               (if <??>
+                   <??>
+                   (succeed 'ok fail2)))
+             fail))))
+
+; not finished
