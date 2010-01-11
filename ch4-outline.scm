@@ -1159,8 +1159,8 @@ count ; => 1 with memoization, 2 if not
     (lambda (env succeed fail)
       (pproc env
              (lambda (pred-value fail2)
-               (if <??>
-                   <??>
+               (if (true? pred-value)
+                   (succeed 'ok fail)
                    (succeed 'ok fail2)))
              fail))))
 
