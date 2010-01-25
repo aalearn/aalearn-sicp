@@ -1143,25 +1143,184 @@ count ; => 1 with memoization, 2 if not
 	(rproc (analyze (if-fail-rescue exp))))
     (lambda (env succeed fail)
       (tproc env
-	     (lambda (val fail2)
-	       (
-; not finished
+	     succeed
+	     (lambda () (rproc env succeed fail))))))
 
-
+; is that right?
 
 ;;  * _ Exercise 4.53
 ; the procedure should try all pairs before failing
-; (8 35) (3 110) (3 20) (1 110)
+; (8 35) (3 110) (3 20)
 
 ;;  * _ Exercise 4.54
+; answer from inimino
 (define (analyze-require exp)
   (let ((pproc (analyze (require-predicate exp))))
     (lambda (env succeed fail)
       (pproc env
              (lambda (pred-value fail2)
-               (if (true? pred-value)
-                   (succeed 'ok fail)
+               (if (false? pred-value)
+                   (fail2)
                    (succeed 'ok fail2)))
              fail))))
 
-; not finished
+
+;;  * _ Exercise 4.55
+; a. all people supervised by Ben Bitdiddle;
+(supervisor ?x (Bitdiddle Ben)) 
+
+; b. the names and jobs of all people in the accounting division;
+(job ?x (accounting . ?type))   
+
+; c. the names and addresses of all people who live in Slumerville.
+(address ?x (Slumerville . ?address)) 
+
+ 
+;;  * _ Exercise 4.56
+; a. the names of all people who are supervised by Ben Bitdiddle, together with their addresses;
+(and (supervisor ?x (Bitdiddle Ben))
+     (address ?x ?y))
+
+; b. all people whose salary is less than Ben Bitdiddle's, together with their salary and Ben Bitdiddle's salary;
+(and (salary ?name ?salary)
+     (salary (Bitdiddle Ben) ?bensalary)
+     (lisp-value > ?bensalary ?salary))
+
+; c. all people who are supervised by someone who is not in the computer division, together with the supervisor's name and job.
+(and (supervisor ?x ?supervisor)
+     (not (job ?supervisor (computer . ?type)))
+     (job ?supervisor ?job))
+
+
+;;  * _ Exercise 4.57
+(rule (can-replace ?person-1 ?person-2)
+      (and (not (same ?person-1 ?person-2))
+	   (or (and (job ?person-1 ?x) (job ?person-2 ?x))
+	       (and (job ?person-1 ?job-1)
+		    (job ?person-2 ?job-2)
+		    (can-do-job ?job-1 ?job-2)))))
+
+; a.
+(can-replace ?x (Fect Cy D))
+
+; b.
+(and (can-replace ?cheaper ?pricier)
+     (salary ?cheaper ?cheaper-salary)
+     (salary ?pricier ?pricier-salary)
+     (lisp-value < ?cheaper ?pricier))
+
+
+;;  * _ Exercise 4.58
+(rule (big-shot ?person)
+      (and (job ?person (?department . ?rest))
+	   (supervisor ?person ?super)
+	   (job ?super (?super-department . ?super-rest))
+	   (not (same ?department ?super-department))))
+
+;;  * _ Exercise 4.59
+; a.
+(meeting ?department (Friday ?time))
+
+; b. 
+(rule (meeting-time ?person ?day-and-time)
+      (or (meeting whole-company ?day-and-time)
+	  (and (job ?person (?department . ?rest))
+	       (meeting ?department ?day-and-time))))
+
+; c.
+(meeting-time (Hacker Alyssa P) (Wednesday ?time))
+
+;;  * _ Exercise 4.60
+; The query system tries out all possible values and returns all answers which
+; match the required properties; since the lives-near rule is commutative, we 
+; should see both answers.
+
+; To eliminate duplicates we could add a requirement that is not commutative, for example
+; we could compare the names of the two people (assuming the company has no two employees
+; with exactly the same name) by including in lives-near a rule like:
+(rule (alphabetically-before ?person-1 ?person-2)
+      (lisp-value string<? (lisp-value stringify ?person-1) (lisp-value stringify ?person-2)))
+
+; assumes an appropriate definition of stringify which converts a list to a string
+
+
+;;  * _ Exercise 4.61
+; next-to is actually implemented as "immediately before"
+; (?x next-to ?y in (1 (2 3) 4))
+(1 next-to (2 3) in (1 (2 3) 4))
+((2 3) next-to 4 in (1 (2 3) 4))
+(4 next-to () in (1 (2 3) 4))
+
+; (?x next-to 1 in (2 1 3 1))
+(2 next-to 1 in (2 1 3 1))
+(3 next-to 1 in (2 1 3 1))
+
+;;  * _ Exercise 4.62
+(rule (last-pair (?x) ?x))
+(rule (last-pair (?u . ?v) ?x) (last-pair ?v ?x))
+
+; I think it should work correctly on (last-pair ?x (3))
+
+; not tested yet, since "assert!" was only described later, and rules were 
+; not created without the assert! command.
+
+
+;;  * _ Exercise 4.63
+(rule (grandson ?g ?s)
+      (and (son ?f ?s)
+	   (son ?g ?f)))
+
+(rule (son ?m ?s)
+      (and (wife ?m ?w)
+	   (son ?w ?s)))
+
+(grandson Cain ?who)
+(son Lamech ?who)
+(grandson Methushael ?who)
+
+;;  * _ Exercise 4.64
+; Louis has changed the rule to switch where the recursion happens.  This causes out-ranked-by
+;  to run repeatedly without applying the second "supervisor" filter (which would cut out the infinite cases). 
+; Example: when checking if Ben is outranked by Alyssa, it evaluates the following pattern:
+;  (outranked-by (Bitdiddle Ben) (Hacker Alyssa P))
+;  which first checks if Alyssa is his supervisor (no)
+;  then goes to run (outranked-by ?middle-manager (Hacker Alyssa P)).
+;  This in turn will eventually check (outranked-by (Bitdiddle Ben) (Hacker Alyssa P))
+;  which is what we were running before.  Therefore this never terminates.
+
+ 
+;;  * _ Exercise 4.65
+; Ben Bitdiddle satisfies the supervisor role 3 times over, so satisfies middle-manager three times over.
+; The wheel rule contains an ?x variable; 3 different answers satisfy the pattern with ?middle-manager = Ben. 
+; As a result Oliver Warbucks appears once as the wheel for middle manager Eben Scrooge and 3 times for Ben.
+
+;;  * _ Exercise 4.66
+; Ben's function assumes that he will get unique "facts" from the database, and therefore sum, average, etc.
+; will work.  But instead Cy's result illustrates that if a set of entries in the database satisfies the patterns
+; in distinct ways (i.e. if temporary variables created can have different values, as ?x does in the case of ?wheel).
+
+; Depending on the desired behavior, one possible solution is just to accumulate the unique responses to the query,
+; e.g. the accumulation-functions will accumulate the stream into a list as pairs of the form (?person ?amount)
+; but only append to the list if ?person hasn't already been added to the list.  Then the sum can be computed
+; by simply calling something like (accumulate + 0 (map cdr uniquified-list))
+
+
+;;  * _ Exercise 4.67
+; the basic idea is to keep the history of patterns and frames examined as pairs.  We have to examine the specific
+; pattern-frame combination and see if it has appeared before in the history.
+
+
+;;  * _ Exercise 4.68
+(assert! (rule (reverse (?x) (?x)))
+(assert! (rule (reverse (?u . ?v) (?w . ?u))
+			(reverse ?v ?w)))
+
+  (cons (rev (cdr y) 
+
+(reverse (1) ?x)      ; => (reverse (1) (1)) check
+(reverse (1 2) ?x)    ; 
+
+(reverse (1 2 3) ?x)
+
+
+
