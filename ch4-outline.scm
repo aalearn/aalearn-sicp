@@ -1350,9 +1350,6 @@ count ; => 1 with memoization, 2 if not
 	       (and (wife ?m ?w)
 		    (son ?w ?s))))
 
-; additional
-((great grandson) Adam Irad)
-
 (assert! (rule (ends-in-grandson (grandson))))
 (assert! (rule (ends-in-grandson (?x . ?y))
 	       (ends-in-grandson ?y)))
@@ -1361,18 +1358,16 @@ count ; => 1 with memoization, 2 if not
 (ends-in-grandson (great great ?x)) ; ok
 
 (assert! (rule ((great . ?rel) ?x ?y)
-	       (and (ends-in-grandson ?rel)
-		    (son ?p ?y)		    
-		    (?rel ?x ?p))))
+	       (and (son ?p ?y)
+		    (?rel ?x ?p)
+		    (ends-in-grandson ?rel))))
 
 (assert! (rule ((grandson) ?x ?y)
 	       (grandson ?x ?y)))
 
 ((great grandson) ?g ?ggs) ; => ok, though duplicates involved?
-(?relationship Adam Irad)  ; out of memory
-
-; come back and fix this!
-
+(?relationship Adam Irad)  ; => ((great grandson) adam irad)
+(?rel Adam Jubal)          ; ok
 
 ;;  * _ Exercise 4.70
 ; Without the let, the set! sets both the outer THE-ASSERTIONS and the inner THE-ASSERTIONS
@@ -1417,7 +1412,7 @@ count ; => 1 with memoization, 2 if not
 (put 'unique 'qeval uniquely-asserted)
 
 (job ?x (computer wizard))          ; => okay from before
-(unique (job ?x (computer wizard))) ; => nothing. bad
+(unique (job ?x (computer wizard))) ; ok
 
 (and (job ?x ?j) (unique (job ?anyone ?j))) ; ok
 (and (supervisor ?someone ?x) (unique (supervisor ?one ?x))) ; => eben scrooge + alyssa hacker
@@ -1432,11 +1427,27 @@ count ; => 1 with memoization, 2 if not
                       frame-stream))))
 
 
-; basic concept here is to 
 
 
 (define (conjoin conjuncts frame-stream)
 
+
+
+(define (extend-if-consistent var dat frame)
+  (let ((binding (binding-in-frame var frame)))
+    (if binding
+        (pattern-match (binding-value binding) dat frame)
+        (extend var dat frame))))
+
+
+(define (merge-if-consistent frame1 frame2)
+  (define (merge-one binding-list combined-frame)
+  ; be recursive here
+  (cond ((null? frame1) frame2)
+	((eq? frame2
+      (
+  (map (lambda (binding) 
+	 (extend-if-consistent (binding-variable binding) (binding-value binding) frame2))
 
 ;;  * _ Exercise 4.77
 
