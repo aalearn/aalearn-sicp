@@ -1193,12 +1193,12 @@ count ; => 1 with memoization, 2 if not
 
 
 ;;  * _ Exercise 4.57
-(rule (can-replace ?person-1 ?person-2)
-      (and (not (same ?person-1 ?person-2))
-	   (or (and (job ?person-1 ?x) (job ?person-2 ?x))
-	       (and (job ?person-1 ?job-1)
-		    (job ?person-2 ?job-2)
-		    (can-do-job ?job-1 ?job-2)))))
+(assert! (rule (can-replace ?person-1 ?person-2)
+      (and (job ?person-1 ?job-1)
+	   (job ?person-2 ?job-2)
+	   (not (same ?person-1 ?person-2))
+	   (or (same ?job-1 ?job-2)
+	       (can-do-job ?job-1 ?job-2)))))
 
 ; a.
 (can-replace ?x (Fect Cy D))
@@ -1246,6 +1246,10 @@ count ; => 1 with memoization, 2 if not
 
 ;;  * _ Exercise 4.61
 ; next-to is actually implemented as "immediately before"
+(assert! (rule (?x next-to ?y in (?x ?y . ?u))))
+(assert! (rule (?x next-to ?y in (?v . ?z))
+      (?x next-to ?y in ?z)))
+
 ; (?x next-to ?y in (1 (2 3) 4))
 (1 next-to (2 3) in (1 (2 3) 4))
 ((2 3) next-to 4 in (1 (2 3) 4))
@@ -1256,14 +1260,12 @@ count ; => 1 with memoization, 2 if not
 (3 next-to 1 in (2 1 3 1))
 
 ;;  * _ Exercise 4.62
-(rule (last-pair (?x) ?x))
+(rule (last-pair (?x) (?x)))
 (rule (last-pair (?u . ?v) ?x) (last-pair ?v ?x))
 
-; I think it should work correctly on (last-pair ?x (3))
-
-; not tested yet, since "assert!" was only described later, and rules were 
-; not created without the assert! command.
-
+; This will not work correctly on (last-pair ?x (3)), since it will try to find anything
+; that matches the second rule!  That means looking for any pairs that end in (3), which 
+; means an infinite recursion.
 
 ;;  * _ Exercise 4.63
 (rule (grandson ?g ?s)
@@ -1311,16 +1313,142 @@ count ; => 1 with memoization, 2 if not
 
 
 ;;  * _ Exercise 4.68
-(assert! (rule (reverse (?x) (?x)))
-(assert! (rule (reverse (?u . ?v) (?w . ?u))
-			(reverse ?v ?w)))
 
-  (cons (rev (cdr y) 
+(assert! (rule (append-to-form () ?y ?y)))
+(assert! (rule (append-to-form (?u . ?v) ?y (?u . ?z))
+      (append-to-form ?v ?y ?z)))
+
+
+(assert! (rule (reverse () ())))
+(assert! (rule (reverse (?u . ?v) ?z)
+	       (and (reverse ?v ?w)
+		    (append-to-form ?w (?u) ?z))))
 
 (reverse (1) ?x)      ; => (reverse (1) (1)) check
-(reverse (1 2) ?x)    ; 
+(reverse (1 2) ?x)    ; check
 
-(reverse (1 2 3) ?x)
+(reverse (1 2 3) ?x)  ; check
+
+
+;;  * _ Exercise 4.69
+; from text -- for convenience
+(assert! (son Adam Cain))
+(assert! (son Cain Enoch))
+(assert! (son Enoch Irad))
+(assert! (son Irad Mehujael))
+(assert! (son Mehujael Methushael))
+(assert! (son Methushael Lamech))
+(assert! (wife Lamech Ada))
+(assert! (son Ada Jabal))
+(assert! (son Ada Jubal))
+
+; from before
+(assert! (rule (grandson ?g ?s)
+	       (and (son ?f ?s)
+		    (son ?g ?f))))
+(assert! (rule (son ?m ?s)
+	       (and (wife ?m ?w)
+		    (son ?w ?s))))
+
+; additional
+((great grandson) Adam Irad)
+
+(assert! (rule (ends-in-grandson (grandson))))
+(assert! (rule (ends-in-grandson (?x . ?y))
+	       (ends-in-grandson ?y)))
+
+(ends-in-grandson (great ?x))       ; => (ends-in-grandson (great grandson)) ok
+(ends-in-grandson (great great ?x)) ; ok
+
+(assert! (rule ((great . ?rel) ?x ?y)
+	       (and (ends-in-grandson ?rel)
+		    (son ?p ?y)		    
+		    (?rel ?x ?p))))
+
+(assert! (rule ((grandson) ?x ?y)
+	       (grandson ?x ?y)))
+
+((great grandson) ?g ?ggs) ; => ok, though duplicates involved?
+(?relationship Adam Irad)  ; out of memory
+
+; come back and fix this!
+
+
+;;  * _ Exercise 4.70
+; Without the let, the set! sets both the outer THE-ASSERTIONS and the inner THE-ASSERTIONS
+;  at the same time; the stream will be an infinite stream of whatever assertion is contained 
+;  in the variable assertion.  Same, obviously, for the let in add-rule!
+
+;;  * _ Exercise 4.71
+; The main problem seems to be that without delaying the second stream, e.g. the one created
+;  by apply-rules, you're forcing it to generate right away, which could generate an infinite loop?
+;  Not sure -- create examples.
+
+
+;;  * _ Exercise 4.72
+; The advantage of interleave generally is that combining infinite streams otherwise would mean
+;  that you'll only see items of stream 1.  So take a disjoin that's looking at an infinite stream
+;  of these...
+
+
+;;  * _ Exercise 4.73
+; ...
+
+
+;;  * _ Exercise 4.74
+(define (simple-stream-flatmap proc s)
+  (simple-flatten (stream-map proc s)))
+
+(define (simple-flatten stream)
+  (stream-map stream-car
+              (stream-filter (lambda (test-stream) (not (stream-null? test-stream))) stream)))
+
+; Don't believe this should change the behavior of the program at all.
+
+;;  * _ Exercise 4.75
+(define (uniquely-asserted query frame-stream)
+  (stream-flatmap
+   (lambda (frame)
+     (let ((results (qeval (car query) (singleton-stream frame))))
+       (if (and (not (stream-null? results)) (stream-null? (stream-cdr results)))
+	   results
+	   the-empty-stream)))
+   frame-stream))
+(put 'unique 'qeval uniquely-asserted)
+
+(job ?x (computer wizard))          ; => okay from before
+(unique (job ?x (computer wizard))) ; => nothing. bad
+
+(and (job ?x ?j) (unique (job ?anyone ?j))) ; ok
+(and (supervisor ?someone ?x) (unique (supervisor ?one ?x))) ; => eben scrooge + alyssa hacker
+
+;;  * _ Exercise 4.76
+; original version of conjoin
+(define (conjoin conjuncts frame-stream)
+  (if (empty-conjunction? conjuncts)
+      frame-stream
+      (conjoin (rest-conjuncts conjuncts)
+               (qeval (first-conjunct conjuncts)
+                      frame-stream))))
+
+
+; basic concept here is to 
+
+
+(define (conjoin conjuncts frame-stream)
+
+
+;;  * _ Exercise 4.77
+
+;;  * _ Exercise 4.78
+
+;;  * _ Exercise 4.79
 
 
 
+
+
+; misc. utilities
+; (restart 1)
+; (initialize-data-base microshaft-data-base) 
+; (query-driver-loop)
