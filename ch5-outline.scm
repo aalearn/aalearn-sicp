@@ -37,10 +37,8 @@
  test-c
    (test (op >) (reg c) (reg n))
    (branch (label factorial-done))
-   (assign x (op *) (reg p) (reg c))
-   (assign p (reg x))
-   (assign d (op +) (const 1) (reg c))
-   (assign c (reg d))
+   (assign p (op *) (reg p) (reg c))
+   (assign c (op +) (const 1) (reg c))
    (goto (label test-c))
  factorial-done)
 
