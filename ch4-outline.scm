@@ -1453,7 +1453,11 @@ count ; => 1 with memoization, 2 if not
 
 ;;  * _ Exercise 4.77
 
-; The idea here is to return a promise; when a frame gets extended by a possible value, the promise checks to see if all the necessary variables in the lisp-value expression have been assigned a value.  If they have, then the lisp-value runs immediately and the expression is checked; if not, the same promise is returned.
+; The idea here is to return a promise; when a frame gets extended 
+; by a possible value, the promise checks to see if all the necessary 
+; variables in the lisp-value expression have been assigned a value.  
+; If they have, then the lisp-value runs immediately and the expression 
+; is checked; if not, the same promise is returned.
 
 ;;  * _ Exercise 4.78
 
