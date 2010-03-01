@@ -1426,12 +1426,11 @@ count ; => 1 with memoization, 2 if not
                (qeval (first-conjunct conjuncts)
                       frame-stream))))
 
-
-
-
+; new version
 (define (conjoin conjuncts frame-stream)
-
-
+  (map-stream merge-frame-if-consistent
+	      (qeval (first-conjunct conjuncts) frame-stream)
+	      (qeval (first-conjunct (rest-conjuncts conjuncts)) frame-stream)))
 
 (define (extend-if-consistent var dat frame)
   (let ((binding (binding-in-frame var frame)))
@@ -1441,21 +1440,28 @@ count ; => 1 with memoization, 2 if not
 
 
 (define (merge-if-consistent frame1 frame2)
-  (define (merge-one binding-list combined-frame)
-  ; be recursive here
-  (cond ((null? frame1) frame2)
-	((eq? frame2
-      (
-  (map (lambda (binding) 
-	 (extend-if-consistent (binding-variable binding) (binding-value binding) frame2))
+  (if (null? frame1)
+      frame2
+      (let (combined-frame 
+	    (extend-if-consistent (binding-value binding) 
+				  (binding-variable binding) 
+				  frame2))
+	(if combined-frame
+	    (merge-if-consistent (cdr frame1) combined-frame)
+	    false))))
+
 
 ;;  * _ Exercise 4.77
 
+; The idea here is to return a promise; when a frame gets extended by a possible value, the promise checks to see if all the necessary variables in the lisp-value expression have been assigned a value.  If they have, then the lisp-value runs immediately and the expression is checked; if not, the same promise is returned.
+
 ;;  * _ Exercise 4.78
+
+; skipped
 
 ;;  * _ Exercise 4.79
 
-
+; skipped
 
 
 
