@@ -393,4 +393,20 @@
      fact-done)))
 
 (set-register-contents! fact-machine 'n 6)
-(start-machine
+(start fact-machine)
+(get-register-contents fact-machine 'val) ; => 720
+((fact-machine 'stack) 'print-statistics) ; => (total-pushes = 10 maximum-depth = 10)
+
+(define (quick-machine-fact n)
+  ((fact-machine 'stack) 'initialize)
+  (set-register-contents! fact-machine 'n n)
+  (start fact-machine)
+  (get-register-contents fact-machine 'val) 
+  ((fact-machine 'stack) 'print-statistics))
+
+(quick-machine-fact 6) ; => (total-pushes = 10 maximum-depth = 10)
+(quick-machine-fact 7) ; => (total-pushes = 12 maximum-depth = 12)
+(quick-machine-fact 8) ; => (total-pushes = 14 maximum-depth = 14)
+(quick-machine-fact 9) ; => (total-pushes = 16 maximum-depth = 16)
+(quick-machine-fact 25); => (total-pushes = 48 maximum-depth = 48)
+; so apparently it's 2n-2 for both operations
