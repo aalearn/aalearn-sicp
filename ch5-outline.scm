@@ -101,9 +101,9 @@
  base-case
    (assign val (const 1))                  ; base case: b^0 = 1
    (goto (reg continue))                   ; return to caller
- fact-done)
+ expt-done)
 
-; b. interative exponentiation
+; b. iterative exponentiation
 ; this one can be done with or without a stack, choosing to do it 
 ; without a stack...
 (controller
@@ -197,3 +197,200 @@
   ...
   (save continue)
 
+
+;;  * _ Exercise 5.7
+(define expt-machine
+  (make-machine
+   '(n b val continue)
+   (list (list '* *) (list '- -) (list '= =))
+   '(
+     (assign continue (label expt-done))     ; set up final return address
+     expt-loop
+     (test (op =) (reg n) (const 0))
+     (branch (label base-case))
+     
+     ;; set up for recursion
+     (save continue)
+     (save n)
+     (assign n (op -) (reg n) (const 1))
+     (assign continue (label after-expt))
+     (goto (label expt-loop))
+     after-expt
+     (restore n)
+     (restore continue)
+     (assign val (op *) (reg b) (reg val))   ; val now contains b*b^(n - 1)
+     (goto (reg continue))                   ; return to caller
+     base-case
+     (assign val (const 1))                  ; base case: b^0 = 1
+     (goto (reg continue))                   ; return to caller
+     expt-done)))
+
+(set-register-contents! expt-machine 'n 5)
+(set-register-contents! expt-machine 'b 4)
+(start expt-machine)
+(get-register-contents expt-machine 'val)    ; => 1024 = 4^5
+
+; iterative
+(define expt-machine-iterative
+  (make-machine
+   '(n b p)
+   (list (list '* *) (list '- -) (list '= =))
+   '(
+     (assign p (const 1))
+     test-expt
+     (test (op =) (reg n) (const 0))
+     (branch (label expt-done))
+     (assign p (op *) (reg b) (reg p))
+     (assign n (op -) (reg n) (const 1))
+     (goto (label test-expt))
+     expt-done)))
+
+(set-register-contents! expt-machine-iterative 'n 4)
+(set-register-contents! expt-machine-iterative 'b 5)
+(start expt-machine-iterative)
+(get-register-contents expt-machine-iterative 'p) ; => 625
+
+;;  * _ Exercise 5.8
+
+; Looks like the first instance of a label will "win", since both versions
+; are stored in the table, and assoc will choose the first label that qualifies.
+
+; modified extract-labels
+(define (extract-labels text receive)
+  (if (null? text)
+      (receive '() '())
+      (extract-labels (cdr text)
+       (lambda (insts labels)
+         (let ((next-inst (car text)))
+           (if (symbol? next-inst)
+	       (if (assoc next-inst labels)
+		   (error "Duplicate label -- ASSEMBLE" next-inst)
+		   (receive insts
+			    (cons (make-label-entry next-inst
+						    insts)
+				  labels)))
+               (receive (cons (make-instruction next-inst)
+                              insts)
+                        labels)))))))
+
+
+;;  * _ Exercise 5.9
+(define (operable? exp)
+  (or (register-exp? exp) (constant-exp? exp)))
+ 
+(define (make-operation-exp exp machine labels operations)
+  (let ((op (lookup-prim (operation-exp-op exp) operations))
+        (aprocs
+         (map (lambda (e)
+		(if (operable? e)
+		    (make-primitive-exp e machine labels)
+		    (error "Cannot operate on item -- ASSEMBLE" op e)))
+              (operation-exp-operands exp))))
+    (lambda ()
+      (apply op (map (lambda (p) (p)) aprocs)))))
+
+;;  * _ Exercise 5.10
+
+; Not clear how meaningfully different the syntax can get without changing
+; the requirement that the first key is a keyword as identified in
+; make-execution-procedure.  So a more interesting syntax might require 
+; introducing more abstractions for use in that procedure.
+
+
+;;  * _ Exercise 5.11
+
+; a. Can eliminate the (restore continue) ... (save continue) as noted in exercise 5.6.
+;    Don't see an additional instruction that can be eliminated.
+; b. 
+(define (make-save inst machine stack pc)
+  (let ((reg (get-register machine
+                           (stack-inst-reg-name inst))))
+    (lambda ()
+      (push stack (cons (stack-inst-reg-name inst) (get-contents reg)))
+      (advance-pc pc))))
+
+(define (make-restore inst machine stack pc)
+  (let ((reg (get-register machine
+                           (stack-inst-reg-name inst))))
+    (lambda ()
+      (let ((stack-pop (pop stack)))
+	(if (= (car stack-pop) (stack-inst-reg-name inst))
+	    (set-contents! reg (cdr stack-pop))
+	    (error "Wrong restore register -- ASSMBLE" (car stack-pop) (stack-inst-reg-name inst)))
+	(advance-pc pc)))))
+
+; c. extracted from make-new-machine
+; Conceptually, modify allocate-register to additionally create a stack
+; seems convenient to store it in the register table:
+
+; ... extract from make-new-machine ...
+ (set! register-table
+                  (cons (list name (make-register name) (make-stack))
+                        register-table)))
+
+(define (get-register-stack reg)
+  (caddr reg))
+
+(define (make-save inst machine stack pc)
+  (let* ((reg (get-register machine
+                           (stack-inst-reg-name inst)))
+	(reg-stack (get-register-stack reg)))
+    (lambda ()
+      (push reg-stack (get-contents reg))
+      (advance-pc pc))))
+
+(define (make-restore inst machine stack pc)
+  (let* ((reg (get-register machine
+                           (stack-inst-reg-name inst)))
+	 (reg-stack (get-register-stack reg)))
+    (lambda ()
+      (set-contents! reg (pop reg-stack))    
+      (advance-pc pc))))
+
+
+;;  * _ Exercise 5.12
+
+; interesting, but skipped for now
+
+
+;;  * _ Exercise 5.13
+; just as simple as this, I think:
+; ... extracted from make-new-machine ...
+ (define (lookup-register name)
+   (let ((val (assoc name register-table)))
+     (if val
+	 (cadr val)
+	 (allocate-register name))))
+
+
+;;  * _ Exercise 5.14
+
+(define fact-machine
+  (make-machine
+   '(continue n val)
+   (list (list '* *) (list '- -) (list '= =))
+   '(
+     (assign continue (label fact-done))     ; set up final return address
+     fact-loop
+     (test (op =) (reg n) (const 1))
+     (branch (label base-case))
+     ;; Set up for the recursive call by saving n and continue.
+     ;; Set up continue so that the computation will continue
+     ;; at after-fact when the subroutine returns.
+     (save continue)
+     (save n)
+     (assign n (op -) (reg n) (const 1))
+     (assign continue (label after-fact))
+     (goto (label fact-loop))
+     after-fact
+     (restore n)
+     (restore continue)
+     (assign val (op *) (reg n) (reg val))   ; val now contains n(n - 1)!
+     (goto (reg continue))                   ; return to caller
+     base-case
+     (assign val (const 1))                  ; base case: 1! = 1
+     (goto (reg continue))                   ; return to caller
+     fact-done)))
+
+(set-register-contents! fact-machine 'n 6)
+(start-machine
