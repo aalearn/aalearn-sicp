@@ -46,15 +46,14 @@
 
 ; simple versions, assuming good-enough? and improve are primitives
 ; data path diagram:
-; http://yuml.me/diagram/class/[1]-1 to g>[g], [g]->[good enough], [g]->[improve], [improve]->[i], [i]-i to g>[g].
+; http://yuml.me/diagram/class/[1]-1 to g>[g], [g]->[good enough], [g]->[improve], [improve]-improve to g>[g].
 
 (controller
  (assign g (const 1.0))
  test-good-enough
-   (test good-enough? (reg g))
+   (test good-enough? (reg g) (reg x))
    (branch (label sqrt-done))
-   (assign i improve (reg g))
-   (assign g (reg i))
+   (assign g improve (reg g) (reg x))
    (goto (label test-good-enough))
  sqrt-done)
 
@@ -101,7 +100,7 @@
  base-case
    (assign val (const 1))                  ; base case: b^0 = 1
    (goto (reg continue))                   ; return to caller
- fact-done)
+ expt-done)
 
 ; b. interative exponentiation
 ; this one can be done with or without a stack, choosing to do it 
