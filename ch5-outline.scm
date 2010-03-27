@@ -395,14 +395,27 @@
 
 (define (unique-add items new-item)
   (cond ((null? items) (list new-item))
-	((equal? (car items)) items)
+	((equal? (car items) new-item) items)
 	(else (cons (car items) (unique-add (cdr items) new-item)))))
 
-(define (add-register-source items reg list)
-  ())
-      
+(define assign-reg-name cadr)
+(define assign-reg-source cddr)
+
+(define (add-register-source items new-item)
+  (let ((reg-source-list (assoc (assign-reg-name new-item) items)))
+    (if reg-source-list
+	(begin
+	  (set-cdr! reg-source-list (unique-add (cdr reg-source-list) (assign-reg-source new-item)))
+	  items)
+	(cons
+	 (cons (assign-reg-name new-item) (list (assign-reg-source new-item)))
+	 items))))
+
+(define (assign? instr) (tagged? instr 'assign))
+
 (define (extract-register-sources controller-text)
-  (fold-left unique-add '()))
+  (fold-left add-register-source '()
+	     (filter assign? controller-text)))
 	     
 (define (assemble controller-text machine)
   ((machine 'set-sorted-instructions) (extract-sorted-instructions controller-text))
@@ -460,19 +473,20 @@
               ((eq? message 'stack) stack)
               ((eq? message 'operations) the-ops)
 
-	      ((eq? message 'sorted-instructions) sorted-instructions) ; new
+	      ; new operations below
+	      ((eq? message 'sorted-instructions) sorted-instructions)
 	      ((eq? message 'set-sorted-instructions) 
 	       (lambda (insts) (set! sorted-instructions insts)))
 
-	      ((eq? message 'reg-entry-points) reg-entry-points) ; new
+	      ((eq? message 'reg-entry-points) reg-entry-points)
 	      ((eq? message 'set-reg-entry-points) 
 	       (lambda (regs) (set! reg-entry-points regs)))
 
-	      ((eq? message 'suspended-registers) suspended-registers) ; new
+	      ((eq? message 'suspended-registers) suspended-registers)
 	      ((eq? message 'set-suspended-registers) 
 	       (lambda (regs) (set! suspended-registers regs)))
 
-	      ((eq? message 'register-sources) register-sources) ; new
+	      ((eq? message 'register-sources) register-sources)
 	      ((eq? message 'set-register-sources) 
 	       (lambda (sources) (set! register-sources sources)))
 
@@ -520,7 +534,9 @@
 (fib-machine 'sorted-instructions) ; check!
 (fib-machine 'reg-entry-points)    ; => (continue) check!
 (fib-machine 'suspended-registers) ; => (continue n val) check!
-   
+(fib-machine 'register-sources)    ; looks okay, see below:
+; =>  ((val ((op +) (reg val) (reg n)) ((reg n))) (n ((op -) (reg n) (const 1)) ((op -) (reg n) (const 2)) ((reg val))) (continue ((label fib-done)) ((label afterfib-n-1)) ((label afterfib-n-2))))
+
 
 ;;  * _ Exercise 5.13
 ; just as simple as this, I think:
