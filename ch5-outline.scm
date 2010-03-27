@@ -350,8 +350,178 @@
 
 ;;  * _ Exercise 5.12
 
-; interesting, but skipped for now
+; did we implement this one before? -- this one doesn't seem optimized
+(define (unique-add-sort-sym-by items new-item proc)
+  (cond ((null? items) (list new-item))
+	((equal? (car items) new-item) items) ; eq? doesn't work
+	((symbol<? (proc new-item) (proc (car items))) (cons new-item items))
+	(else (cons (car items) (unique-add-sort-sym-by (cdr items) new-item proc)))))
 
+(unique-add-sort-sym-by '((apple 1) (daisy 2)) '(banana 3) car)        ; check
+(unique-add-sort-sym-by '((apple x 1) (daisy y 2)) '(banana z 3) cadr) ; check
+
+(define (identity x) x)
+(define (unique-add-sort-sym items new-item) (unique-add-sort-sym-by items new-item identity))
+(unique-add-sort-sym '(apple daisy) 'banana)                           ; check
+
+(define (extract-sorted-instructions controller-text)
+  (fold-left (lambda (list item) (unique-add-sort-sym-by list item car)) '()
+	      (filter (lambda (x) (not (symbol? x))) controller-text)))
+
+(define (extract-reg-entry-points controller-text)
+  (fold-left unique-add-sort-sym '()
+	     (map get-goto-reg (filter goto-reg? controller-text))))
+
+(define (tagged? item tag)
+  (and (list? item) (eq? (car item) tag)))
+
+(define (get-goto-reg instr) (cadadr instr))
+(define (goto-reg? instr) 
+  (and (tagged? instr 'goto)
+       (tagged? (cadr instr) 'reg)))
+
+(define (extract-reg-entry-points controller-text)
+  (fold-left (lambda (list item) (unique-add-sort-sym-by list item identity)) '()
+	     (map get-goto-reg
+		  (filter goto-reg? controller-text))))
+
+(define (extract-suspended-registers controller-text)
+  (fold-left unique-add-sort-sym '()
+	     (map get-suspended-reg (filter suspended-reg? controller-text))))
+
+(define (get-suspended-reg instr) (cadr instr))
+(define (suspended-reg? instr)
+  (or (tagged? instr 'save)
+      (tagged? instr 'restore)))
+
+(define (unique-add items new-item)
+  (cond ((null? items) (list new-item))
+	((equal? (car items)) items)
+	(else (cons (car items) (unique-add (cdr items) new-item)))))
+
+(define (add-register-source items reg list)
+  ())
+      
+(define (extract-register-sources controller-text)
+  (fold-left unique-add '()))
+	     
+(define (assemble controller-text machine)
+  ((machine 'set-sorted-instructions) (extract-sorted-instructions controller-text))
+  ((machine 'set-reg-entry-points) (extract-reg-entry-points controller-text))
+  ((machine 'set-suspended-registers) (extract-suspended-registers controller-text))
+  ((machine 'set-register-sources) (extract-register-sources controller-text))
+  (extract-labels controller-text
+    (lambda (insts labels)
+      (update-insts! insts labels machine)
+      insts)))
+
+(define (make-new-machine)
+  (let ((pc (make-register 'pc))
+        (flag (make-register 'flag))
+        (stack (make-stack))
+        (the-instruction-sequence '())
+	(sorted-instructions '())
+	(reg-entry-points '())
+	(suspended-registers '())
+	(register-sources '()))
+    (let ((the-ops
+           (list (list 'initialize-stack
+                       (lambda () (stack 'initialize)))))
+          (register-table
+           (list (list 'pc pc) (list 'flag flag))))
+      (define (allocate-register name)
+        (if (assoc name register-table)
+            (error "Multiply defined register: " name)
+            (set! register-table
+                  (cons (list name (make-register name))
+                        register-table)))
+        'register-allocated)
+      (define (lookup-register name)
+        (let ((val (assoc name register-table)))
+          (if val
+              (cadr val)
+              (error "Unknown register:" name))))
+      (define (execute)
+        (let ((insts (get-contents pc)))
+          (if (null? insts)
+              'done
+              (begin
+                ((instruction-execution-proc (car insts)))
+                (execute)))))
+      (define (dispatch message)
+        (cond ((eq? message 'start)
+               (set-contents! pc the-instruction-sequence)
+               (execute))
+              ((eq? message 'install-instruction-sequence)
+               (lambda (seq) (set! the-instruction-sequence seq)))
+              ((eq? message 'allocate-register) allocate-register)
+              ((eq? message 'get-register) lookup-register)
+              ((eq? message 'install-operations)
+               (lambda (ops) (set! the-ops (append the-ops ops))))
+              ((eq? message 'stack) stack)
+              ((eq? message 'operations) the-ops)
+
+	      ((eq? message 'sorted-instructions) sorted-instructions) ; new
+	      ((eq? message 'set-sorted-instructions) 
+	       (lambda (insts) (set! sorted-instructions insts)))
+
+	      ((eq? message 'reg-entry-points) reg-entry-points) ; new
+	      ((eq? message 'set-reg-entry-points) 
+	       (lambda (regs) (set! reg-entry-points regs)))
+
+	      ((eq? message 'suspended-registers) suspended-registers) ; new
+	      ((eq? message 'set-suspended-registers) 
+	       (lambda (regs) (set! suspended-registers regs)))
+
+	      ((eq? message 'register-sources) register-sources) ; new
+	      ((eq? message 'set-register-sources) 
+	       (lambda (sources) (set! register-sources sources)))
+
+              (else (error "Unknown request -- MACHINE" message))))
+      dispatch)))
+
+
+; fib-machine from figure 5.12, wrapped in make-machine
+(define fib-machine
+  (make-machine
+   '(continue n val)
+   (list (list '< <) (list '- -) (list '+ +))
+   '(
+     (assign continue (label fib-done))
+     fib-loop
+     (test (op <) (reg n) (const 2))
+     (branch (label immediate-answer))
+     ;; set up to compute Fib(n - 1)
+     (save continue)
+     (assign continue (label afterfib-n-1))
+     (save n)                           ; save old value of n
+     (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+     (goto (label fib-loop))            ; perform recursive call
+     afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+     (restore n)
+     (restore continue)
+     ;; set up to compute Fib(n - 2)
+     (assign n (op -) (reg n) (const 2))
+     (save continue)
+     (assign continue (label afterfib-n-2))
+     (save val)                         ; save Fib(n - 1)
+     (goto (label fib-loop))
+     afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+     (assign n (reg val))               ; n now contains Fib(n - 2)
+     (restore val)                      ; val now contains Fib(n - 1)
+     (restore continue)
+     (assign val                        ;  Fib(n - 1) +  Fib(n - 2)
+	     (op +) (reg val) (reg n)) 
+     (goto (reg continue))              ; return to caller, answer is in val
+     immediate-answer
+     (assign val (reg n))               ; base case:  Fib(n) = n
+     (goto (reg continue))
+     fib-done)))
+
+(fib-machine 'sorted-instructions) ; check!
+(fib-machine 'reg-entry-points)    ; => (continue) check!
+(fib-machine 'suspended-registers) ; => (continue n val) check!
+   
 
 ;;  * _ Exercise 5.13
 ; just as simple as this, I think:
@@ -410,3 +580,36 @@
 (quick-machine-fact 9) ; => (total-pushes = 16 maximum-depth = 16)
 (quick-machine-fact 25); => (total-pushes = 48 maximum-depth = 48)
 ; so apparently it's 2n-2 for both operations
+
+
+
+
+
+
+
+
+;;;; misc stuff
+
+; not actually needed for 5.12!
+(define (symbol-tree<? a b)
+  (cond ((and (null? a) (null? b)) false)
+	((and (symbol? a) (not (symbol? b))) true)
+	((and (not (symbol? a)) (symbol? b)) false)
+	((and (symbol? a) (symbol? b) (eq? a b)) false)
+	((and (symbol? a) (symbol? b)) (string<? (symbol->string a) (symbol->string b)))
+	((equal? (car a) (car b)) (symbol-tree<? (cdr a) (cdr b)))
+	(else (symbol-tree<? (car a) (car b)))))
+
+(symbol-tree<? 'a 'b) ; => #f
+(symbol-tree<? '(c a) '(b a)) ; => #f
+(symbol-tree<? '(c a) '(f a)) ; => #t
+(symbol-tree<? '(sym (reg x)) '(sym 4))
+
+
+(define (extract-collect controller-text proc)
+  (define (inner text collected)
+    (if (null? text)
+	collected
+	(inner (cdr text)
+	       (proc collected (car text)))))
+  (inner controller-text '()))
