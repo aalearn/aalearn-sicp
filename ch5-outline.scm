@@ -435,7 +435,10 @@
 	(sorted-instructions '())
 	(reg-entry-points '())
 	(suspended-registers '())
-	(register-sources '()))
+	(register-sources '())
+	(instruction-count 0)
+	(trace false)
+	(last-label false))
     (let ((the-ops
            (list (list 'initialize-stack
                        (lambda () (stack 'initialize)))))
@@ -473,7 +476,7 @@
               ((eq? message 'stack) stack)
               ((eq? message 'operations) the-ops)
 
-	      ; new operations below
+	      ; new operations for 5.12
 	      ((eq? message 'sorted-instructions) sorted-instructions)
 	      ((eq? message 'set-sorted-instructions) 
 	       (lambda (insts) (set! sorted-instructions insts)))
@@ -490,6 +493,20 @@
 	      ((eq? message 'set-register-sources) 
 	       (lambda (sources) (set! register-sources sources)))
 
+	      ; 5.15
+	      ((eq? message 'instruction-count) instruction-count)
+	      ((eq? message 'reset-instruction-count)
+	       (set! instruction-count 0))
+	      ((eq? message 'inc-instruction-count)
+	       (set! instruction-count (+ 1 instruction-count)))
+	      
+	      ; 5.16
+	      ((eq? message 'trace) trace)
+	      ((eq? message 'trace-on)
+	       (set! trace true))
+	      ((eq? message 'trace-off)
+	       (set! trace false))
+	      
               (else (error "Unknown request -- MACHINE" message))))
       dispatch)))
 
@@ -597,34 +614,227 @@
 ; so apparently it's 2n-2 for both operations
 
 
+;;  * _ Exercise 5.15
+
+; see also answer to 5.12
+; todo: combine 5.12, 5.15-19 for easier reading!
+
+(define (println item) (display item) (newline))
+
+(define (make-execution-procedure inst labels machine
+                                  pc flag stack ops)
+  (lambda ()
+    ; for 5.17
+    (if (tagged? inst 'label)
+	(begin
+	  (if (machine 'trace)
+	      (println (cadr inst)))
+	  (advance-pc pc))
+	(begin
+	  ; for 5.15
+	  (machine 'inc-instruction-count)
+
+	  ; for 5.16
+	  (if (machine 'trace)
+	      (println inst))
+	  ((cond ((eq? (car inst) 'assign)
+		  (make-assign inst machine labels ops pc))
+		 ((eq? (car inst) 'test)
+		  (make-test inst machine labels ops flag pc))
+		 ((eq? (car inst) 'branch)
+		  (make-branch inst machine labels flag pc))
+		 ((eq? (car inst) 'goto)
+		  (make-goto inst machine labels pc))
+		 ((eq? (car inst) 'save)
+		  (make-save inst machine stack pc))
+		 ((eq? (car inst) 'restore)
+		  (make-restore inst machine stack pc))
+		 ((eq? (car inst) 'perform)
+		  (make-perform inst machine labels ops pc))
+		 (else (error "Unknown instruction type -- ASSEMBLE"
+			      inst))))))))
+
+((fact-machine 'stack) 'initialize)
+(set-register-contents! fact-machine 'n 7)
+(start fact-machine)
+(fact-machine 'instruction-count) ; => 71
+(fact-machine 'reset-instruction-count) 
+(fact-machine 'instruction-count) ; => 0
+
+(get-register-contents fact-machine 'val) ; => 5040
+
+;;  * _ Exercise 5.16
+
+; see exercise 5.15 above
+
+; testing ...
+((fact-machine 'stack) 'initialize)
+(set-register-contents! fact-machine 'n 4)
+(fact-machine 'trace-on)
+(fact-machine 'trace)
+(fact-machine 'trace-off)
+(start fact-machine)
+(get-register-contents fact-machine 'val)
+
+; seems to work
+
+;;  * _ Exercise 5.17
+
+(define (extract-labels text receive)
+  (if (null? text)
+      (receive '() '())
+      (extract-labels (cdr text)
+       (lambda (insts labels)
+         (let ((next-inst (car text)))
+           (if (symbol? next-inst)
+               (receive (cons (list (list 'label next-inst)) insts)
+                        (cons (make-label-entry next-inst
+                                                insts)
+                              labels))
+               (receive (cons (make-instruction next-inst)
+                              insts)
+                        labels)))))))
+; implemented above
+((fact-machine 'stack) 'initialize)
+(set-register-contents! fact-machine 'n 4)
+(fact-machine 'trace-on)
+(fact-machine 'start)
+(get-register-contents fact-machine 'val) 
+; checks out
 
 
+;;  * _ Exercise 5.18
+
+; skipped
+
+;;  * _ Exercise 5.19
+
+; skipped
+
+;;  * _ Exercise 5.20
+
+(define x (cons 1 2))
+(define y (list x x))
+; y -> [*][*]->[*][/]
+;       |       |
+;       +-------/      
+;       V
+; x -> [*][*]
+;       |  |
+;       V  V
+;      [1][2]
+; 
+;
+; Index       0   1    2    3
+; the-cars        n1   p1   p1
+; the-cdrs        n2   p3   e0
+
+;;  * _ Exercise 5.21
+
+; a.
+(define count-leaves-recursive-machine
+  (make-machine
+   '(continue tree val)
+   (list (list 'car car) (list 'cdr cdr) 
+	 (list 'null? null?) (list 'pair? pair?) (list '+ +))
+   '(
+       (assign continue (label count-leaves-done))
+      test-tree
+       (test (op null?) (reg tree))
+       (branch (label return-0))
+       (test (op pair?) (reg-tree))
+       (branch (label return-recurse-left))
+       (assign val 1)
+       (goto (reg continue))
+      return-0
+       (assign val 0)
+       (goto (reg continue))
+      return-recurse-left
+       (save continue)
+       (assign continue (label return-recurse-right))
+       (save val)
+       (save tree)
+       (assign tree (op car) (reg tree))
+       (goto (reg test-tree))
+      return-recurse-right
+       (assign tmp (reg val))
+       (restore tree)
+       (restore val)
+       (assign val (op +) (reg tmp) (reg val))
+       (assign continue (label return-recurse-done))
+       (save val)
+       (save tree)
+       (assign tree (op cdr) (reg tree))
+       (goto (reg test-tree))
+      return-recurse-done
+       (assign tmp (reg val))
+       (restore tree)
+       (restore val)
+       (restore continue)
+       (assign val (op +) (reg tmp) (reg val))
+       (goto (reg continue))
+      count-leaves-done)))
+
+; b.
+(define count-leaves-iterative-machine
+  (make-machine
+   '(continue tree n)
+   (list (list 'car car) (list 'cdr cdr)
+	 (list 'null? null?) (list 'pair? pair?) (list '+ +))
+   '(
+       (assign continue (label count-leaves-done))
+       (assign n (const 0))
+      test-tree
+       (test (op null?) (reg tree))
+       (branch (label return-0))
+       (test (op pair?) (reg-tree))
+       (branch (label return-recurse-left))
+       (assign n (op +) (reg n) (const 1))
+       (goto (reg continue))
+      return-0
+       (goto (reg continue))
+      return-recurse-left
+       (save continue)
+       (assign continue (label return-recurse-right))
+       (save tree)
+       (assign tree (op car) (reg tree))
+       (goto (reg test-tree))
+      return-recurse-right
+       (restore tree)
+       (assign continue (label return-recurse-done))
+       (save tree)
+       (assign tree (op cdr) (reg tree)) ; using tree saving correctly here?
+       (goto (reg test-tree))
+      return-recurse-done
+       (restore tree)
+       (restore continue)
+       (goto (reg continue))
+      count-leaves-done)))
 
 
+;;  * _ Exercise 5.22
 
-
-;;;; misc stuff
-
-; not actually needed for 5.12!
-(define (symbol-tree<? a b)
-  (cond ((and (null? a) (null? b)) false)
-	((and (symbol? a) (not (symbol? b))) true)
-	((and (not (symbol? a)) (symbol? b)) false)
-	((and (symbol? a) (symbol? b) (eq? a b)) false)
-	((and (symbol? a) (symbol? b)) (string<? (symbol->string a) (symbol->string b)))
-	((equal? (car a) (car b)) (symbol-tree<? (cdr a) (cdr b)))
-	(else (symbol-tree<? (car a) (car b)))))
-
-(symbol-tree<? 'a 'b) ; => #f
-(symbol-tree<? '(c a) '(b a)) ; => #f
-(symbol-tree<? '(c a) '(f a)) ; => #t
-(symbol-tree<? '(sym (reg x)) '(sym 4))
-
-
-(define (extract-collect controller-text proc)
-  (define (inner text collected)
-    (if (null? text)
-	collected
-	(inner (cdr text)
-	       (proc collected (car text)))))
-  (inner controller-text '()))
+(define append-machine
+  (make-machine
+   '(continue lista listb combined add-point tmp)
+   (list (list 'car car) (list 'cdr cdr) (list 'cons cons)
+	 (list 'set-car! set-car!) (list 'set-cdr! set-cdr!)
+	 (list 'null? null?) (list 'pair? pair?))
+   '(
+       (assign combined (const '()))
+       (assign add-point
+       (assign continue (label append-done))
+      test-list-a
+       (assign tmp (op car) (reg lista))
+       (test (op null?) (reg tmp))
+       (branch (label test-list-b))
+       (perform (op set-car!) combined (reg tmp))
+       (perform (op set-cdr!) combined (reg combined))
+       (assign 
+       (goto (label test-list-a))
+      test-list-b
+       (assign tmp (op car) (reg listb))
+       (test (op null?) (reg tmp))
+       (branch (label append-done))
+       (perform (op
+; not-finished
