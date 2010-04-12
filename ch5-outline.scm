@@ -352,7 +352,7 @@
 ; did we implement this one before? -- this one doesn't seem optimized
 (define (unique-add-sort-sym-by items new-item proc)
   (cond ((null? items) (list new-item))
-	((equal? (car items) new-item) items) ; eq? doesn't work
+	((equal? (car items) new-item) items) ; eq? only checks for same object, we need structural equality here instead
 	((symbol<? (proc new-item) (proc (car items))) (cons new-item items))
 	(else (cons (car items) (unique-add-sort-sym-by (cdr items) new-item proc)))))
 
@@ -564,6 +564,13 @@
 	 (cadr val)
 	 (allocate-register name))))
 
+(define (allocate-register name)
+  (if (assoc name register-table)
+      (error "Multiply defined register: " name)
+      (set! register-table
+	    (cons (list name (make-register name))
+		  register-table)))
+  (cadar register-table))
 
 ;;  * _ Exercise 5.14
 
@@ -611,7 +618,7 @@
 (quick-machine-fact 8) ; => (total-pushes = 14 maximum-depth = 14)
 (quick-machine-fact 9) ; => (total-pushes = 16 maximum-depth = 16)
 (quick-machine-fact 25); => (total-pushes = 48 maximum-depth = 48)
-; so apparently it's 2n-2 for both operations
+; so apparently it's 2n-2 for both stats
 
 
 ;;  * _ Exercise 5.15
@@ -658,6 +665,13 @@
 (set-register-contents! fact-machine 'n 7)
 (start fact-machine)
 (fact-machine 'instruction-count) ; => 71
+(fact-machine 'reset-instruction-count) 
+(fact-machine 'instruction-count) ; => 0
+
+((fact-machine 'stack) 'initialize)
+(set-register-contents! fact-machine 'n 8)
+(start fact-machine)
+(fact-machine 'instruction-count) ; => 82
 (fact-machine 'reset-instruction-count) 
 (fact-machine 'instruction-count) ; => 0
 
@@ -725,9 +739,11 @@
 ;      [1][2]
 ; 
 ;
-; Index       0   1    2    3
-; the-cars        n1   p1   p1
+; Index       0   1    2    3   4
+; the-cars        n1   p1   p1  
 ; the-cdrs        n2   p3   e0
+;                 x    y        free
+
 
 ;;  * _ Exercise 5.21
 
@@ -814,27 +830,239 @@
 
 ;;  * _ Exercise 5.22
 
+(define (append x y)
+  (if (null? x)
+      y
+      (cons (car x) (append (cdr x) y))))
+
 (define append-machine
+  (make-machine
+   '(lista listb combined add-point tmp)
+   (list (list 'car car) (list 'cdr cdr) (list 'cons cons)
+	 (list 'set-cdr! set-cdr!)
+	 (list 'null? null?))
+   '(
+       (assign combined (op cons) (const 0) (const '())) ; start with a dummy value (how to eliminate?)
+       (assign add-point (reg combined))
+
+      test-list-a
+       (test (op null?) (reg lista))
+       (branch (label test-list-b))
+
+       (assign tmp (op car) (reg lista))
+       (assign tmp (op cons) (reg tmp) (const '()))
+       (perform (op set-cdr!) (reg add-point) (reg tmp))
+       (assign (reg add-point) (op cdr) (reg add-point))
+       (assign lista (op cdr) (reg lista))
+       (goto (label test-list-a))
+    
+      test-list-b
+       (test (op null?) (reg listb))
+       (branch (label append-done))
+       
+       (perform (op set-cdr!) (reg add-point) (reg listb)) ; don't copy the second list
+
+      append-done
+       (assign combined (op cdr) (reg combined))  ; remove dummy value
+       )))
+
+(define (append! x y)
+  (set-cdr! (last-pair x) y)
+  x)
+
+(define append!-machine
   (make-machine
    '(continue lista listb combined add-point tmp)
    (list (list 'car car) (list 'cdr cdr) (list 'cons cons)
 	 (list 'set-car! set-car!) (list 'set-cdr! set-cdr!)
 	 (list 'null? null?) (list 'pair? pair?))
    '(
-       (assign combined (const '()))
-       (assign add-point
-       (assign continue (label append-done))
-      test-list-a
-       (assign tmp (op car) (reg lista))
-       (test (op null?) (reg tmp))
-       (branch (label test-list-b))
-       (perform (op set-car!) combined (reg tmp))
-       (perform (op set-cdr!) combined (reg combined))
-       (assign 
-       (goto (label test-list-a))
-      test-list-b
-       (assign tmp (op car) (reg listb))
-       (test (op null?) (reg tmp))
-       (branch (label append-done))
-       (perform (op
-; not-finished
+       (assign add-point (reg lista))
+
+       (test (op null?) (reg lista))
+       (branch (label set-a-to-b))
+
+      test-add-point
+       (assign tmp (op cdr) (reg add-point))
+       (branch (label set-cdr-to-b))
+       (assign (reg add-point) (op cdr) (reg add-point))
+       (goto (label test-add-point))
+
+      set-a-to-b
+       (assign (reg lista) (reg listb))
+       (goto (label append!-done))
+
+      set-cdr-to-b
+       (perform (op set-cdr!) (reg add-point) (reg listb))
+
+      append!-done
+       )))
+
+
+;;  * _ Exercise 5.23
+
+; just as simple as this, right?
+eval-dispatch
+  (test (op self-evaluating?) (reg exp))
+  (branch (label ev-self-eval))
+  (test (op variable?) (reg exp))
+  (branch (label ev-variable))
+  (test (op quoted?) (reg exp))
+  (branch (label ev-quoted))
+  (test (op assignment?) (reg exp))
+  (branch (label ev-assignment))
+  (test (op definition?) (reg exp))
+  (branch (label ev-definition))
+  (test (op if?) (reg exp))
+  (branch (label ev-if))
+  (test (op cond?) (reg exp))    ; added
+  (branch (label ev-cond))       ; added
+  (test (op let?) (reg let))     ; added
+  (branch (label ev-let))        ; added
+  (test (op lambda?) (reg exp))
+  (branch (label ev-lambda))
+  (test (op begin?) (reg exp))
+  (branch (label ev-begin))
+  (test (op application?) (reg exp))
+  (branch (label ev-application))
+  (goto (label unknown-expression-type))
+
+ev-cond
+  (assign exp (op cond->if) (reg exp))
+  (goto (label ev-if))
+
+; combines lambda with sequence -- not sure about this one
+ev-let
+  (assign exp (op let->combination) (reg exp))
+  (save continue)
+  (save env) ; necessary?
+  (save unev)
+  (assign continue (label ev-let-done))
+  (goto (label ev-lambda))
+
+ev-let-done
+  (restore unev)
+  (restore env)
+  (restore continue)
+  (goto (reg continue))
+
+
+;;  * _ Exercise 5.24
+ev-cond
+  (save exp)
+  (save unev)
+  (save env)
+  (save continue)
+  (assign unev (op operands) (reg exp))
+ev-cond-test-predicate
+  (assign exp (op first-exp) (reg unev))
+  (assign exp (op first-exp) (reg exp))
+
+  (test (op eq?) (reg exp) (const 'else))
+  (branch (label ev-cond-sequence))
+
+  (assign continue (label ev-cond-decide))
+  (goto (label eval-dispatch))
+
+ev-cond-decide
+  (test (op true?) (reg val))
+  (branch (label ev-cond-sequence))
+
+  (assign unev (op rest-exps) (reg unev))
+  (goto (label ev-cond-test-predicate))
+
+ev-cond-sequence
+  (assign exp (op first-exp) (reg unev))
+  (assign unev (op rest-exps) (reg unev))
+  (assign continue (label ev-cond-finish))
+  (goto (label ev-sequence))
+
+ev-cond-finish
+  (restore continue)
+  (restore env)
+  (restore unev)
+  (restore exp)
+  (goto continue)
+
+
+;;  * _ Exercise 5.25
+eval-dispatch
+  (test (op self-evaluating?) (reg exp))
+  (branch (label ev-self-eval))
+  (test (op variable?) (reg exp))
+  (branch (label ev-variable))
+  (test (op quoted?) (reg exp))
+  (branch (label ev-quoted))
+  (test (op assignment?) (reg exp))
+  (branch (label ev-assignment))
+  (test (op definition?) (reg exp))
+  (branch (label ev-definition))
+  (test (op if?) (reg exp))
+  (branch (label ev-if))
+  (test (op lambda?) (reg exp))
+  (branch (label ev-lambda))
+  (test (op begin?) (reg exp))
+  (branch (label ev-begin))
+  (test (op application?) (reg exp))
+  (branch (label ev-application))
+  (test (op delayed?) (reg exp))
+  (branch (label ev-delayed))
+  (goto (label unknown-expression-type))
+
+ev-delayed
+  (assign exp (op delayed-body) (reg exp)) ; delayed-body, env not defined (number of ways to do it)
+  (save env)
+  (assign env (op delayed-env) (reg env))  ; needed?
+  (save continue)
+  (assign continue (label ev-delayed-finish))
+  (goto (label eval-dispatch))
+
+ev-delayed-finish
+  (restore continue)
+  (restore env)
+
+ev-delay
+  (assign val (op make-delayed) (reg exp))  ; make-delayed not defined
+  (goto (reg continue))
+
+; how to force it?
+
+; not finished
+
+; some code from book below...
+ev-application
+  (save continue)
+  (save env)
+  (assign unev (op operands) (reg exp))
+  (save unev)
+  (assign exp (op operator) (reg exp))
+  (assign continue (label ev-appl-did-operator))
+  (goto (label eval-dispatch))
+
+ev-appl-did-operator
+  (restore unev)                  ; the operands
+  (restore env)
+  (assign argl (op empty-arglist))
+  (assign proc (reg val))         ; the operator
+  (test (op no-operands?) (reg unev))
+  (branch (label apply-dispatch))
+  (save proc)
+
+ev-appl-operand-loop
+  (save argl)
+  (assign exp (op first-operand) (reg unev))
+  (test (op last-operand?) (reg unev))
+  (branch (label ev-appl-last-arg))
+  (save env)
+  (save unev)
+  (assign continue (label ev-appl-accumulate-arg))
+  (goto (label eval-dispatch))
+
+ev-appl-accumulate-arg
+  (restore unev)
+  (restore env)
+  (restore argl)
+  (assign argl (op adjoin-arg) (reg val) (reg argl))
+  (assign unev (op rest-operands) (reg unev))
+  (goto (label ev-appl-operand-loop))
+
