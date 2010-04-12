@@ -760,10 +760,10 @@
        (branch (label return-0))
        (test (op pair?) (reg-tree))
        (branch (label return-recurse-left))
-       (assign val 1)
+       (assign val (const 1))
        (goto (reg continue))
       return-0
-       (assign val 0)
+       (assign val (const 0))
        (goto (reg continue))
       return-recurse-left
        (save continue)
@@ -803,7 +803,7 @@
       test-tree
        (test (op null?) (reg tree))
        (branch (label return-0))
-       (test (op pair?) (reg-tree))
+       (test (op pair?) (reg tree))
        (branch (label return-recurse-left))
        (assign n (op +) (reg n) (const 1))
        (goto (reg continue))
@@ -814,7 +814,7 @@
        (assign continue (label return-recurse-right))
        (save tree)
        (assign tree (op car) (reg tree))
-       (goto (reg test-tree))
+       (goto (label test-tree))
       return-recurse-right
        (restore tree)
        (assign continue (label return-recurse-done))
@@ -884,8 +884,9 @@
 
       test-add-point
        (assign tmp (op cdr) (reg add-point))
+       (test (op null?) (reg tmp))
        (branch (label set-cdr-to-b))
-       (assign (reg add-point) (op cdr) (reg add-point))
+       (assign (reg add-point) (reg tmp))
        (goto (label test-add-point))
 
       set-a-to-b
@@ -986,28 +987,6 @@ ev-cond-finish
 
 
 ;;  * _ Exercise 5.25
-eval-dispatch
-  (test (op self-evaluating?) (reg exp))
-  (branch (label ev-self-eval))
-  (test (op variable?) (reg exp))
-  (branch (label ev-variable))
-  (test (op quoted?) (reg exp))
-  (branch (label ev-quoted))
-  (test (op assignment?) (reg exp))
-  (branch (label ev-assignment))
-  (test (op definition?) (reg exp))
-  (branch (label ev-definition))
-  (test (op if?) (reg exp))
-  (branch (label ev-if))
-  (test (op lambda?) (reg exp))
-  (branch (label ev-lambda))
-  (test (op begin?) (reg exp))
-  (branch (label ev-begin))
-  (test (op application?) (reg exp))
-  (branch (label ev-application))
-  (test (op delayed?) (reg exp))
-  (branch (label ev-delayed))
-  (goto (label unknown-expression-type))
 
 ev-delayed
   (assign exp (op delayed-body) (reg exp)) ; delayed-body, env not defined (number of ways to do it)
@@ -1022,10 +1001,15 @@ ev-delayed-finish
   (restore env)
 
 ev-delay
-  (assign val (op make-delayed) (reg exp))  ; make-delayed not defined
+  (assign val (op make-delayed) (reg exp) (reg env))  ; make-delayed not defined
   (goto (reg continue))
 
-; how to force it?
+
+; need to force something
+force
+  (
+; when to force it?
+
 
 ; not finished
 
