@@ -950,14 +950,18 @@ ev-let-done
 
 ;;  * _ Exercise 5.24
 ev-cond
-  (save exp)
-  (save unev)
-  (save env)
-  (save continue)
   (assign unev (op operands) (reg exp))
+
 ev-cond-test-predicate
+  (test (op null?) (reg unev))
+  (branch (reg continue))
+
+  (save env)
   (assign exp (op first-exp) (reg unev))
+  (assign unev (op rest-exps) (reg exp))
   (assign exp (op first-exp) (reg exp))
+  (save unev)
+  (save exp)
 
   (test (op eq?) (reg exp) (const 'else))
   (branch (label ev-cond-sequence))
@@ -966,6 +970,10 @@ ev-cond-test-predicate
   (goto (label eval-dispatch))
 
 ev-cond-decide
+  (restore exp)
+  (restore unev)
+  (restore env)
+
   (test (op true?) (reg val))
   (branch (label ev-cond-sequence))
 
@@ -975,14 +983,9 @@ ev-cond-decide
 ev-cond-sequence
   (assign exp (op first-exp) (reg unev))
   (assign unev (op rest-exps) (reg unev))
-  (assign continue (label ev-cond-finish))
   (goto (label ev-sequence))
 
 ev-cond-finish
-  (restore continue)
-  (restore env)
-  (restore unev)
-  (restore exp)
   (goto continue)
 
 
@@ -1012,6 +1015,83 @@ force
 
 
 ; not finished
+
+
+;;  * _ Exercise 5.26
+; iterative
+(factorial 3)  ; (total-pushes = 134 maximum-depth = 10)
+(factorial 4)  ; (total-pushes = 169 maximum-depth = 10)
+(factorial 10) ; (total-pushes = 379 maximum-depth = 10)
+
+; a. maximum-depth = 10
+; b. total-pushes = 35n + 29
+
+
+;;  * _ Exercise 5.27
+; recursive
+(factorial 3)  ; (total-pushes = 80 maximum-depth = 18)
+(factorial 4)  ; (total-pushes = 112 maximum-depth = 23)
+(factorial 10) ; (total-pushes = 304 maximum-depth = 53)
+
+; maximum-depth = 5n + 3
+; total-pushes = 32n - 16
+
+;              max-depth  num-pushes
+; recursive    5n + 3     32n - 16
+; iterative    10         35n + 29
+
+
+;;  * _ Exercise 5.28
+
+; iterative
+(factorial 3)  ; (total-pushes = 144 maximum-depth = 23)
+(factorial 4)  ; (total-pushes = 181 maximum-depth = 26)
+(factorial 10) ; (total-pushes = 403 maximum-depth = 44)
+
+; recursive
+(factorial 3)  ; (total-pushes = 86 maximum-depth = 27)
+(factorial 4)  ; (total-pushes = 120 maximum-depth = 35)
+(factorial 10) ; (total-pushes = 324 maximum-depth = 83)
+
+;              max-depth  num-pushes
+; recursive    8n + 3     34n - 16
+; iterative    3n + 14    37n + 33
+
+
+;;  * _ Exercise 5.28
+(define (fib n)
+  (if (< n 2)
+      n
+      (+ (fib (- n 1)) (fib (- n 2)))))
+
+(fib 2)  ; (total-pushes = 72 maximum-depth = 13)
+(fib 3)  ; (total-pushes = 128 maximum-depth = 18) 
+(fib 4)  ; (total-pushes = 240 maximum-depth = 23)
+(fib 5)  ; (total-pushes = 408 maximum-depth = 28)
+(fib 6)  ; (total-pushes = 688 maximum-depth = 33)
+(fib 10) ; (total-pushes = 4944 maximum-depth = 53)
+
+; a. maximum-depth = 5n + 3 (linear, as stated)
+; b. total-pushes = S(n) = S(n-1) + 2 *  ( S(n-1)-S(n-2) )
+
+; n  S(n)  S(n)-S(n-1)  Fib(n)  Fib(n+1)
+; 2   72                1       2
+; 3  128    56          2       3
+; 4  240   112          3       5
+; 5  408   168          5       8
+; 6  688   280          8       13
+
+; Since we're embedding the calls to fib(n-1) and fib(n-2)
+;  we expect that the result will be a sum of cost of those
+;  two calls plus however many pushes it takes to do the comparison
+;  and the addition.
+; We observe that S(n) = S(n-1) + S(n-2) + 40  (k = 40)
+
+; S(n) = 56 * Fib(n+1) - 40
+
+
+
+
 
 ; some code from book below...
 ev-application
