@@ -52,6 +52,8 @@
           (error "Too many arguments supplied" vars vals)
           (error "Too few arguments supplied" vars vals))))
 
+; is there a better way to get a "distinguished condition code"?
+(define unbound-variable-error '(unbound-variable))
 
 (define (lookup-variable-value var env)
   (define (env-loop env)
@@ -62,11 +64,15 @@
              (car vals))
             (else (scan (cdr vars) (cdr vals)))))
     (if (eq? env the-empty-environment)
-        (error "Unbound variable" var)
+;;         (error "Unbound variable" var) ; original
+	unbound-variable-error 		; customized
         (let ((frame (first-frame env)))
           (scan (frame-variables frame)
                 (frame-values frame)))))
   (env-loop env))
+
+(define (unbound-variable-error? val)
+  (eq? val unbound-variable-error))
 
 (define (set-variable-value! var val env)
   (define (env-loop env)

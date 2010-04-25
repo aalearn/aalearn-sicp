@@ -66,6 +66,7 @@
    (list 'procedure-environment procedure-environment)
    (list 'extend-environment extend-environment)
    (list 'lookup-variable-value lookup-variable-value)
+   (list 'unbound-variable-error? unbound-variable-error?)
    (list 'set-variable-value! set-variable-value!)
    (list 'define-variable! define-variable!)
    (list 'primitive-procedure? primitive-procedure?)
@@ -142,6 +143,8 @@ ev-self-eval
   (goto (reg continue))
 ev-variable
   (assign val (op lookup-variable-value) (reg exp) (reg env))
+  (test (op unbound-variable-error?) (reg val))
+  (branch (label signal-error))
   (goto (reg continue))
 ev-quoted
   (assign val (op text-of-quotation) (reg exp))

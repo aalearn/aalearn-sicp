@@ -1058,7 +1058,7 @@ force
 ; iterative    3n + 14    37n + 33
 
 
-;;  * _ Exercise 5.28
+;;  * _ Exercise 5.29
 (define (fib n)
   (if (< n 2)
       n
@@ -1129,4 +1129,15 @@ ev-appl-accumulate-arg
   (assign argl (op adjoin-arg) (reg val) (reg argl))
   (assign unev (op rest-operands) (reg unev))
   (goto (label ev-appl-operand-loop))
+
+;;  * _ Exercise 5.30
+; The question is -- how many different kinds of errors are there?
+;  Variable lookups that fail (given as an example in a)
+;  Applications that are wrong (as in part b)
+;  Arity errors -- but how can these be trapped automatically?
+
+; a. The variable lookup seems like a trivial patch! What am I missing?
+; see diffs in ch5-eceval and ch5-eceval-support
+
+; b. 
 
