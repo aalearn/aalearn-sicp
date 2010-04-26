@@ -1007,14 +1007,8 @@ ev-delay
   (assign val (op make-delayed) (reg exp) (reg env))  ; make-delayed not defined
   (goto (reg continue))
 
-
-; need to force something
-force
-  (
-; when to force it?
-
-
-; not finished
+; still unclear when things should be forced
+; not finished - skipping!
 
 
 ;;  * _ Exercise 5.26
@@ -1139,5 +1133,29 @@ ev-appl-accumulate-arg
 ; a. The variable lookup seems like a trivial patch! What am I missing?
 ; see diffs in ch5-eceval and ch5-eceval-support
 
-; b. 
+; b. simple diffs to ch5-eceval-support.scm
+(define inapplicable-arguments '(inapplicable-arguments))
+
+(define (check-primitive-procedure proc args)
+  (let ((p (cadr proc)))
+    (cond ((eq? p car) (and (= (length args) 1) (pair? (car args))))
+	  ((eq? p cdr) (and (= (length args) 1) (pair? (car args))))
+	  ((eq? p cons) (= (length args) 2))
+	  ((eq? p null?) (= (length args) 1))
+	  ; ... skipping some ...
+	  ((eq? p /) (and (= (length args) 2) (not (= (cadr args) 0))))
+	(else true))))
+
+(define (primitive-procedure-objects)
+  (map (lambda (proc) (list 'primitive (cadr proc)))
+       primitive-procedures))
+
+(define apply-in-underlying-scheme apply)
+
+(define (apply-primitive-procedure proc args)
+  (if (check-primitive-procedure proc args)
+      (apply-in-underlying-scheme
+       (primitive-implementation proc) args)
+      inapplicable-arguments))
+
 

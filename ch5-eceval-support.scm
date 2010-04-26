@@ -136,6 +136,18 @@
   (map car
        primitive-procedures))
 
+(define inapplicable-arguments '(inapplicable-arguments))
+
+(define (check-primitive-procedure proc args)
+  (let ((p (cadr proc)))
+    (cond ((eq? p car) (and (= (length args) 1) (pair? (car args))))
+	  ((eq? p cdr) (and (= (length args) 1) (pair? (car args))))
+	  ((eq? p cons) (= (length args) 2))
+	  ((eq? p null?) (= (length args) 1))
+	  ; ... skipping some ...
+	  ((eq? p /) (and (= (length args) 2) (not (= (cadr args) 0))))
+	(else true))))
+
 (define (primitive-procedure-objects)
   (map (lambda (proc) (list 'primitive (cadr proc)))
        primitive-procedures))
@@ -143,8 +155,10 @@
 (define apply-in-underlying-scheme apply)
 
 (define (apply-primitive-procedure proc args)
-  (apply-in-underlying-scheme
-   (primitive-implementation proc) args))
+  (if (check-primitive-procedure proc args)
+      (apply-in-underlying-scheme
+       (primitive-implementation proc) args)
+      inapplicable-arguments))
 
 
 (define (prompt-for-input string)
