@@ -26,6 +26,7 @@
   (list
    ;;primitive Scheme operations
    (list 'read read)
+   (list 'symbol? symbol?)
 
    ;;operations in syntax.scm
    (list 'self-evaluating? self-evaluating?)
@@ -83,6 +84,7 @@
    (list 'last-operand? last-operand?)
    (list 'no-more-exps? no-more-exps?)	;for non-tail-recursive machine
    (list 'get-global-environment get-global-environment))
+
    )
 
 (define eceval
@@ -172,21 +174,28 @@ ev-lambda
 
 ev-application
   (save continue)
-  (save env)
   (assign unev (op operands) (reg exp))
-  (save unev)
   (assign exp (op operator) (reg exp))
+  (test (op symbol?) (reg exp))
+  (branch (label ev-operator-symbol))
+  (save env)
+  (save unev)
   (assign continue (label ev-appl-did-operator))
   (goto (label eval-dispatch))
+ev-operator-symbol
+  (assign proc (op lookup-variable-value) (reg exp) (reg env))
+  (goto (label ev-appl-did-operator-symbol))
+
 ev-appl-did-operator
   (restore unev)
   (restore env)
-  (assign argl (op empty-arglist))
   (assign proc (reg val))
+ev-appl-did-operator-symbol
+  (assign argl (op empty-arglist))
   (test (op no-operands?) (reg unev))
   (branch (label apply-dispatch))
-  (test (op compound-procedure?) (reg proc))   ; lazy evaluation
-  (branch (label ev-lazy-appl-operand-loop))   ; "
+;  (test (op compound-procedure?) (reg proc))   ; lazy evaluation
+;  (branch (label ev-lazy-appl-operand-loop))   ; "
   (save proc)
 ev-appl-operand-loop
   (save argl)
