@@ -1085,45 +1085,6 @@ ev-delay
 
 
 
-
-
-; some code from book below...
-ev-application
-  (save continue)
-  (save env)
-  (assign unev (op operands) (reg exp))
-  (save unev)
-  (assign exp (op operator) (reg exp))
-  (assign continue (label ev-appl-did-operator))
-  (goto (label eval-dispatch))
-
-ev-appl-did-operator
-  (restore unev)                  ; the operands
-  (restore env)
-  (assign argl (op empty-arglist))
-  (assign proc (reg val))         ; the operator
-  (test (op no-operands?) (reg unev))
-  (branch (label apply-dispatch))
-  (save proc)
-
-ev-appl-operand-loop
-  (save argl)
-  (assign exp (op first-operand) (reg unev))
-  (test (op last-operand?) (reg unev))
-  (branch (label ev-appl-last-arg))
-  (save env)
-  (save unev)
-  (assign continue (label ev-appl-accumulate-arg))
-  (goto (label eval-dispatch))
-
-ev-appl-accumulate-arg
-  (restore unev)
-  (restore env)
-  (restore argl)
-  (assign argl (op adjoin-arg) (reg val) (reg argl))
-  (assign unev (op rest-operands) (reg unev))
-  (goto (label ev-appl-operand-loop))
-
 ;;  * _ Exercise 5.30
 ; The question is -- how many different kinds of errors are there?
 ;  Variable lookups that fail (given as an example in a)
@@ -1159,3 +1120,31 @@ ev-appl-accumulate-arg
       inapplicable-arguments))
 
 
+;;  * _ Exercise 5.31
+; we were previously saving the following:
+;  env, for operator
+;  env, for each operand except the last one
+;  argl for each operand
+;  proc around operand sequence
+
+(f 'x 'y)
+; all save/restore operations are superflous
+
+((f) 'x 'y)
+; all are superfluous except env around the operator
+
+(f (g 'x) y)
+; superfluous:
+;  argl and proc do not need to be saved around eval of y or 'x
+;  env did not need to be saved anywhere
+
+(f (g 'x) 'y)
+; why is this possibly different than the above?
+
+;;  * _ Exercise 5.32
+; we were previously saving the following:
+
+; b. Introducing special cases will make the evaluator more efficient than it was,
+;  but there is a cost to checking all the special cases, and this cost is incurred
+;  every time an expression is analyzed.  The compiler will incur this cost only once
+;  at compile time, which will therefore still give it an advantage.
