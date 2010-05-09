@@ -29,6 +29,12 @@
 ;;(end of compound procedures)
 
 
+(define (make-thunk exp env)
+  (list 'thunk exp env))
+
+(define thunk-exp cadr)
+(define thunk-env caddr)
+
 (define (enclosing-environment env) (cdr env))
 
 (define (first-frame env) (car env))

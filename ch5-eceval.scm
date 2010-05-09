@@ -65,6 +65,10 @@
    (list 'procedure-body procedure-body)
    (list 'procedure-environment procedure-environment)
    (list 'extend-environment extend-environment)
+   (list 'make-thunk make-thunk)
+   (list 'thunk-exp thunk-exp)
+   (list 'thunk-env thunk-env)
+   (list 'thunk? thunk?)
    (list 'lookup-variable-value lookup-variable-value)
    (list 'unbound-variable-error? unbound-variable-error?)
    (list 'set-variable-value! set-variable-value!)
@@ -96,12 +100,22 @@ read-eval-print-loop
   (assign continue (label print-result))
   (goto (label eval-dispatch))
 print-result
+;;lazy evaluation -- force thunks if necessary
+  (test (op thunk?) (reg val))
+  (branch (label force-thunk))
+
 ;;**following instruction optional -- if use it, need monitored stack
   (perform (op print-stack-statistics))
   (perform
    (op announce-output) (const ";;; EC-Eval value:"))
   (perform (op user-print) (reg val))
   (goto (label read-eval-print-loop))
+
+force-thunk
+  (assign exp (op thunk-exp) (reg val))
+  (assign env (op thunk-env) (reg val))
+  (assign continue (label print-result))
+  (goto (label eval-dispatch))
 
 unknown-expression-type
   (assign val (const unknown-expression-type-error))
@@ -171,6 +185,8 @@ ev-appl-did-operator
   (assign proc (reg val))
   (test (op no-operands?) (reg unev))
   (branch (label apply-dispatch))
+  (test (op compound-procedure?) (reg proc))   ; lazy evaluation
+  (branch (label ev-lazy-appl-operand-loop))   ; "
   (save proc)
 ev-appl-operand-loop
   (save argl)
@@ -202,6 +218,28 @@ apply-dispatch
   (test (op compound-procedure?) (reg proc))  
   (branch (label compound-apply))
   (goto (label unknown-procedure-type))
+
+; this section for lazy evaluation
+ev-lazy-appl-operand-loop
+  (assign exp (op first-operand) (reg unev))
+  (test (op last-operand?) (reg unev))
+  (branch (label ev-lazy-appl-last-arg))
+  (assign continue (label ev-lazy-appl-accumulate-arg))
+ev-defer-if-necessary
+  (test (op self-evaluating?) (reg exp))
+  (branch (label ev-self-eval))
+  (assign val (op make-thunk) (reg exp) (reg env))
+  (goto (reg continue))
+ev-lazy-appl-last-arg
+  (assign continue (label ev-lazy-appl-accum-last-arg))
+  (goto (label ev-defer-if-necessary))
+ev-lazy-appl-accumulate-arg
+  (assign argl (op adjoin-arg) (reg val) (reg argl))
+  (assign unev (op rest-operands) (reg unev))
+  (goto (label ev-lazy-appl-operand-loop))
+ev-lazy-appl-accum-last-arg
+  (assign argl (op adjoin-arg) (reg val) (reg argl))
+  (goto (label apply-dispatch))
 
 primitive-apply
   (assign val (op apply-primitive-procedure)
