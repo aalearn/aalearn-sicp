@@ -31,6 +31,8 @@
 
 (define (make-thunk exp env)
   (list 'thunk exp env))
+(define (thunk? exp)
+  (tagged-list? exp 'thunk))
 
 (define thunk-exp cadr)
 (define thunk-env caddr)
