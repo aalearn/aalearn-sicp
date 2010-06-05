@@ -886,7 +886,7 @@
        (assign tmp (op cdr) (reg add-point))
        (test (op null?) (reg tmp))
        (branch (label set-cdr-to-b))
-       (assign (reg add-point) (reg tmp))
+       (assign add-point (reg tmp))
        (goto (label test-add-point))
 
       set-a-to-b
