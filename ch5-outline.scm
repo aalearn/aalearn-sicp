@@ -950,14 +950,18 @@ ev-let-done
 
 ;;  * _ Exercise 5.24
 ev-cond
-  (save exp)
-  (save unev)
-  (save env)
-  (save continue)
   (assign unev (op operands) (reg exp))
+
 ev-cond-test-predicate
+  (test (op null?) (reg unev))
+  (branch (reg continue))
+
+  (save env)
   (assign exp (op first-exp) (reg unev))
+  (assign unev (op rest-exps) (reg exp))
   (assign exp (op first-exp) (reg exp))
+  (save unev)
+  (save exp)
 
   (test (op eq?) (reg exp) (const 'else))
   (branch (label ev-cond-sequence))
@@ -966,6 +970,10 @@ ev-cond-test-predicate
   (goto (label eval-dispatch))
 
 ev-cond-decide
+  (restore exp)
+  (restore unev)
+  (restore env)
+
   (test (op true?) (reg val))
   (branch (label ev-cond-sequence))
 
@@ -975,78 +983,809 @@ ev-cond-decide
 ev-cond-sequence
   (assign exp (op first-exp) (reg unev))
   (assign unev (op rest-exps) (reg unev))
-  (assign continue (label ev-cond-finish))
   (goto (label ev-sequence))
 
 ev-cond-finish
-  (restore continue)
-  (restore env)
-  (restore unev)
-  (restore exp)
   (goto continue)
 
 
 ;;  * _ Exercise 5.25
 
-ev-delayed
-  (assign exp (op delayed-body) (reg exp)) ; delayed-body, env not defined (number of ways to do it)
-  (save env)
-  (assign env (op delayed-env) (reg env))  ; needed?
+; added make-thunk and related functions to support
+; primitive procs are strict
+; self-evaluating are immediately evaluated
+; printing forces thunks
+; see commit: 7a9aab73f8ce562ce12cf4f2fec4adaad0d00b7b
+
+; TODO: also check if variable forcing isn't working, e.g. with formal parameters
+; maybe variables need to be forced immediately after looking them up.
+; also force the operator if necessary
+; also force if-predicates
+
+;;  * _ Exercise 5.26
+; iterative
+(factorial 3)  ; (total-pushes = 134 maximum-depth = 10)
+(factorial 4)  ; (total-pushes = 169 maximum-depth = 10)
+(factorial 10) ; (total-pushes = 379 maximum-depth = 10)
+
+; a. maximum-depth = 10
+; b. total-pushes = 35n + 29
+
+
+;;  * _ Exercise 5.27
+; recursive
+(factorial 3)  ; (total-pushes = 80 maximum-depth = 18)
+(factorial 4)  ; (total-pushes = 112 maximum-depth = 23)
+(factorial 10) ; (total-pushes = 304 maximum-depth = 53)
+
+; maximum-depth = 5n + 3
+; total-pushes = 32n - 16
+
+;              max-depth  num-pushes
+; recursive    5n + 3     32n - 16
+; iterative    10         35n + 29
+
+
+;;  * _ Exercise 5.28
+
+; iterative
+(factorial 3)  ; (total-pushes = 144 maximum-depth = 23)
+(factorial 4)  ; (total-pushes = 181 maximum-depth = 26)
+(factorial 10) ; (total-pushes = 403 maximum-depth = 44)
+
+; recursive
+(factorial 3)  ; (total-pushes = 86 maximum-depth = 27)
+(factorial 4)  ; (total-pushes = 120 maximum-depth = 35)
+(factorial 10) ; (total-pushes = 324 maximum-depth = 83)
+
+;              max-depth  num-pushes
+; recursive    8n + 3     34n - 16
+; iterative    3n + 14    37n + 33
+
+
+;;  * _ Exercise 5.29
+(define (fib n)
+  (if (< n 2)
+      n
+      (+ (fib (- n 1)) (fib (- n 2)))))
+
+(fib 2)  ; (total-pushes = 72 maximum-depth = 13)
+(fib 3)  ; (total-pushes = 128 maximum-depth = 18) 
+(fib 4)  ; (total-pushes = 240 maximum-depth = 23)
+(fib 5)  ; (total-pushes = 408 maximum-depth = 28)
+(fib 6)  ; (total-pushes = 688 maximum-depth = 33)
+(fib 10) ; (total-pushes = 4944 maximum-depth = 53)
+
+; a. maximum-depth = 5n + 3 (linear, as stated)
+; b. total-pushes = S(n) = S(n-1) + 2 *  ( S(n-1)-S(n-2) )
+
+; n  S(n)  S(n)-S(n-1)  Fib(n)  Fib(n+1)
+; 2   72                1       2
+; 3  128    56          2       3
+; 4  240   112          3       5
+; 5  408   168          5       8
+; 6  688   280          8       13
+
+; Since we're embedding the calls to fib(n-1) and fib(n-2)
+;  we expect that the result will be a sum of cost of those
+;  two calls plus however many pushes it takes to do the comparison
+;  and the addition.
+; We observe that S(n) = S(n-1) + S(n-2) + 40  (k = 40)
+
+; S(n) = 56 * Fib(n+1) - 40
+
+
+
+;;  * _ Exercise 5.30
+; The question is -- how many different kinds of errors are there?
+;  Variable lookups that fail (given as an example in a)
+;  Applications that are wrong (as in part b)
+;  Arity errors -- but how can these be trapped automatically?
+
+; a. The variable lookup seems like a trivial patch! What am I missing?
+; see diffs in ch5-eceval and ch5-eceval-support
+
+; b. simple diffs to ch5-eceval-support.scm
+(define inapplicable-arguments '(inapplicable-arguments))
+
+(define (check-primitive-procedure proc args)
+  (let ((p (cadr proc)))
+    (cond ((eq? p car) (and (= (length args) 1) (pair? (car args))))
+	  ((eq? p cdr) (and (= (length args) 1) (pair? (car args))))
+	  ((eq? p cons) (= (length args) 2))
+	  ((eq? p null?) (= (length args) 1))
+	  ; ... skipping some ...
+	  ((eq? p /) (and (= (length args) 2) (not (= (cadr args) 0))))
+	(else true))))
+
+(define (primitive-procedure-objects)
+  (map (lambda (proc) (list 'primitive (cadr proc)))
+       primitive-procedures))
+
+(define apply-in-underlying-scheme apply)
+
+(define (apply-primitive-procedure proc args)
+  (if (check-primitive-procedure proc args)
+      (apply-in-underlying-scheme
+       (primitive-implementation proc) args)
+      inapplicable-arguments))
+
+
+;;  * _ Exercise 5.31
+; we were previously saving the following:
+;  env, for operator
+;  env, for each operand except the last one
+;  argl for each operand
+;  proc around operand sequence
+
+(f 'x 'y)
+; all save/restore operations are superflous
+
+((f) 'x 'y)
+; all are superfluous except env around the operator
+; Note: argl does not need to be saved because operators are handled
+;  before we even create an argl for the operands
+
+(f (g 'x) y)
+; superfluous:
+;  argl and proc do not need to be saved around eval of y or 'x
+;  env does not need to be saved anywhere, except around (g 'x)
+
+(f (g 'x) 'y)
+; why is this possibly different than the above?
+
+;;  * _ Exercise 5.32
+
+; a. see commit: 06c3dd5cccfe51bdf8b6fd4a1cd9b1bae0d5fd3f
+; b. Introducing special cases will make the evaluator more efficient than it was,
+;  but there is a cost to checking all the special cases, and this cost is incurred
+;  every time an expression is analyzed.  The compiler will incur this cost only once
+;  at compile time, which will therefore still give it an advantage.
+
+
+;;  * _ Exercise 5.33
+(compile
+  '(define (factorial n)
+     (if (= n 1)
+	 1
+	 (* (factorial (- n 1)) n)))
+  'val
+  'next)
+
+;; construct the procedure and skip over code for the procedure body
+  (assign val
+          (op make-compiled-procedure) (label entry2) (reg env))
+  (goto (label after-lambda1))
+
+entry2     ; calls to factorial will enter here
+  (assign env (op compiled-procedure-env) (reg proc))
+  (assign env
+          (op extend-environment) (const (n)) (reg argl) (reg env))
+;; begin actual procedure body
   (save continue)
-  (assign continue (label ev-delayed-finish))
-  (goto (label eval-dispatch))
+  (save env)
 
-ev-delayed-finish
-  (restore continue)
+;; compute (= n 1)
+  (assign proc (op lookup-variable-value) (const =) (reg env))
+  (assign val (const 1))
+  (assign argl (op list) (reg val))
+  (assign val (op lookup-variable-value) (const n) (reg env))
+  (assign argl (op cons) (reg val) (reg argl))
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-branch17))
+compiled-branch16
+  (assign continue (label after-call15))
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+primitive-branch17
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
+
+after-call15   ; val now contains result of (= n 1)
   (restore env)
-
-ev-delay
-  (assign val (op make-delayed) (reg exp) (reg env))  ; make-delayed not defined
+  (restore continue)
+  (test (op false?) (reg val))
+  (branch (label false-branch4))
+true-branch5  ; return 1
+  (assign val (const 1))
   (goto (reg continue))
 
-
-; need to force something
-force
-  (
-; when to force it?
-
-
-; not finished
-
-; some code from book below...
-ev-application
+false-branch4
+;; compute and return (* (factorial (- n 1)) n)
+  (assign proc (op lookup-variable-value) (const *) (reg env))
   (save continue)
-  (save env)
-  (assign unev (op operands) (reg exp))
-  (save unev)
-  (assign exp (op operator) (reg exp))
-  (assign continue (label ev-appl-did-operator))
-  (goto (label eval-dispatch))
+  (save proc)   ; save * procedure
+  (assign val (op lookup-variable-value) (const n) (reg env))
+  (assign argl (op list) (reg val))
+  (save argl)   ; save partial argument list for *
 
-ev-appl-did-operator
-  (restore unev)                  ; the operands
-  (restore env)
-  (assign argl (op empty-arglist))
-  (assign proc (reg val))         ; the operator
-  (test (op no-operands?) (reg unev))
-  (branch (label apply-dispatch))
-  (save proc)
+;; compute (factorial (- n 1)), which is the other argument for *
+  (assign proc
+          (op lookup-variable-value) (const factorial) (reg env))
+  (save proc)  ; save factorial procedure
 
-ev-appl-operand-loop
-  (save argl)
-  (assign exp (op first-operand) (reg unev))
-  (test (op last-operand?) (reg unev))
-  (branch (label ev-appl-last-arg))
-  (save env)
-  (save unev)
-  (assign continue (label ev-appl-accumulate-arg))
-  (goto (label eval-dispatch))
 
-ev-appl-accumulate-arg
-  (restore unev)
-  (restore env)
-  (restore argl)
-  (assign argl (op adjoin-arg) (reg val) (reg argl))
-  (assign unev (op rest-operands) (reg unev))
-  (goto (label ev-appl-operand-loop))
+(compile
+ '(define (factorial-alt n)
+  (if (= n 1)
+      1
+      (* n (factorial-alt (- n 1)))))
+ 'val
+ 'next)
 
+((env) (val) 
+ (
+  (assign val (op make-compiled-procedure) (label entry19) (reg env)) 
+  (goto (label after-lambda18))  
+entry19 
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (n)) (reg argl) (reg env)) 
+
+;; begin actual procedure body
+  (save continue) 
+  (save env) 
+
+;; compute (= n 1)
+  (assign proc (op lookup-variable-value) (const =) (reg env)) 
+  (assign val (const 1)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (op lookup-variable-value) (const n) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch34)) 
+compiled-branch33 
+  (assign continue (label after-call32)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+primitive-branch34 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+after-call32 
+  (restore env) 
+  (restore continue) 
+  (test (op false?) (reg val)) 
+  (branch (label false-branch21)) 
+true-branch22 
+  (assign val (const 1)) (goto (reg continue)) 
+false-branch21 
+;; compute and return (* n (factorial-alt (- n 1)))
+  (assign proc (op lookup-variable-value) (const *) (reg env)) 
+  (save continue) 
+  (save proc) 
+;; ** env is saved here
+  (save env) 
+;; ** The factorial-alt is looked up before getting n
+  (assign proc (op lookup-variable-value) (const factorial-alt) (reg env)) 
+  (save proc) 
+  (assign proc (op lookup-variable-value) (const -) (reg env)) 
+  (assign val (const 1)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (op lookup-variable-value) (const n) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch25)) 
+compiled-branch24 
+  (assign continue (label after-call23)) 
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val)) 
+primitive-branch25 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+after-call23 
+  (assign argl (op list) (reg val)) 
+  (restore proc) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch28)) 
+compiled-branch27 
+  (assign continue (label after-call26)) 
+;; factorial-alt called here
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+primitive-branch28 
+ (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+after-call26 
+  (assign argl (op list) (reg val)) 
+;; ** env is restored here
+  (restore env) 
+  (assign val (op lookup-variable-value) (const n) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (restore proc) 
+  (restore continue) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch31)) 
+compiled-branch30 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+primitive-branch31 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
+  (goto (reg continue)) 
+after-call29 
+after-if20 
+after-lambda18 
+  (perform (op define-variable!) (const factorial-alt) (reg val) (reg env)) 
+  (assign val (const ok))
+))
+
+; It appears that this version does not actually use tail call optimization --
+; we will get extra envs stored on the stack for each recursion.  Marked above.
+; This happens because the compiler can detect the earlier call
+
+
+;;  * _ Exercise 5.34
+(compile
+ '(define (factorial n)
+  (define (iter product counter)
+    (if (> counter n)
+        product
+        (iter (* counter product)
+              (+ counter 1))))
+  (iter 1 1))
+ 'val
+ 'next)
+
+;; iterative factorial compiled code
+;;  most interesting divergences from recursive version marked with *
+(
+ (env) 
+ (val) 
+ (
+  ;; construct the procedure and skip over code for the procedure body
+  (assign val (op make-compiled-procedure) (label entry2) (reg env)) 
+  (goto (label after-lambda1)) 
+  entry2 				; calls to factorial enter here
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (n)) (reg argl) (reg env)) 
+
+  ;; * construct the iter procedure and skip over code for the procedure body
+  (assign val (op make-compiled-procedure) (label entry7) (reg env)) 
+  (goto (label after-lambda6)) 
+  entry7				; calls to iter enter here
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (product counter)) (reg argl) (reg env)) 
+
+  ;; begin iter body
+  (save continue) 			
+  (save env) 
+
+  ;; compute (> counter n)
+  (assign proc (op lookup-variable-value) (const >) (reg env)) 
+  (assign val (op lookup-variable-value) (const n) (reg env)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (op lookup-variable-value) (const counter) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch22)) 
+  compiled-branch21 
+  (assign continue (label after-call20)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  primitive-branch22 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  after-call20 				; val contains result of (> counter n)
+  (restore env) 
+  (restore continue) 
+  (test (op false?) (reg val)) 
+  (branch (label false-branch9)) 
+  true-branch10 
+  (assign val (op lookup-variable-value) (const product) (reg env)) 
+  (goto (reg continue)) 
+  false-branch9
+
+  ;; * construct additional call to iter
+  (assign proc (op lookup-variable-value) (const iter) (reg env)) 
+  (save continue)		  
+  (save proc)			 
+  (save env)			
+
+  ;; compute (+ n 1)
+  (assign proc (op lookup-variable-value) (const +) (reg env)) 
+  (assign val (const 1)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (op lookup-variable-value) (const counter) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch16)) 
+  compiled-branch15 
+  (assign continue (label after-call14)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) primitive-branch16 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  after-call14 				; val contains result of (+ n 1)
+  (assign argl (op list) (reg val)) 
+  (restore env) 			; * additional stack usage: restore env
+  (save argl) 
+
+  ;; compute (* counter product)
+  (assign proc (op lookup-variable-value) (const *) (reg env)) 
+  (assign val (op lookup-variable-value) (const product) (reg env)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (op lookup-variable-value) (const counter) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch13)) 
+  compiled-branch12 
+  (assign continue (label after-call11)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) primitive-branch13 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  after-call11 				; val now contains result of (* counter product) 
+  (restore argl) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+
+  ;; * actual call to iter
+  (restore proc) 		
+  (restore continue) 			; * reduced stack usage, since we can just
+					; use the prior version of continue, instead of 
+					; saving it and trying something different
+
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch19)) 
+  compiled-branch18 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) primitive-branch19 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  (goto (reg continue)) 
+  after-call17 
+  after-if8 
+  after-lambda6 
+
+  ;; * define iter variable (end of iter procedure)
+  (perform (op define-variable!) (const iter) (reg val) (reg env)) 
+  (assign val (const ok)) 
+
+  ;; call (iter 1 1)
+  (assign proc (op lookup-variable-value) (const iter) (reg env)) 
+  (assign val (const 1)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (const 1)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch5)) 
+  compiled-branch4 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) primitive-branch5 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  (goto (reg continue)) 
+  after-call3 
+  after-lambda1
+
+  ;; define factorial variable
+  (perform (op define-variable!) (const factorial) (reg val) (reg env)) 
+  (assign val (const ok))))
+
+;;  * _ Exercise 5.35
+(define (f x) (+ x (g (+ x 2))))
+
+(compile '(define (f x) (+ x (g (+ x 2)))) 'val 'next) ; looks right
+
+
+;;  * _ Exercise 5.36
+; The compiler evaluates procedures in right-to-left order.
+; construct-arglist determines this order, by processing the
+;  arguments from last to first.
+
+; the original version of the code
+(define (construct-arglist operand-codes)
+  (let ((operand-codes (reverse operand-codes)))
+    (if (null? operand-codes)
+        (make-instruction-sequence '() '(argl)
+         '((assign argl (const ()))))
+        (let ((code-to-get-last-arg
+               (append-instruction-sequences
+                (car operand-codes)
+                (make-instruction-sequence '(val) '(argl)
+                 '((assign argl (op list) (reg val)))))))
+          (if (null? (cdr operand-codes))
+              code-to-get-last-arg
+              (preserving '(env)
+               code-to-get-last-arg
+               (code-to-get-rest-args
+                (cdr operand-codes))))))))
+
+; a modified version of the code, to go left-to-right
+(define (construct-arglist operand-codes)
+  ;; no let statement to reverse operands
+  (if (null? operand-codes)
+      (make-instruction-sequence '() '(argl)
+				 '((assign argl (const ()))))
+      (let ((code-to-get-first-arg
+	     (append-instruction-sequences
+	      (car operand-codes)
+	      (make-instruction-sequence '(val) '(argl)
+					 '((assign argl (op list) (reg val)))))))
+	(if (null? (cdr operand-codes))
+	    code-to-get-first-arg
+	    (preserving '(env)
+			code-to-get-first-arg
+			(code-to-get-rest-args
+			 (cdr operand-codes)))))))
+
+(define (code-to-get-rest-args operand-codes)
+  (let ((code-for-next-arg
+         (preserving '(argl)
+          (car operand-codes)
+	  ;; arguably cheating: using "append" op instead of cons
+          (make-instruction-sequence '(val argl) '(argl)
+           '(
+	     (assign val (op list) (reg val))
+	     (assign argl (op append) (reg argl) (reg val)))))))
+    (if (null? (cdr operand-codes))
+        code-for-next-arg
+        (preserving '(env)
+         code-for-next-arg
+         (code-to-get-rest-args (cdr operand-codes))))))
+
+; we should expect this to be more inefficient, since the append code will require
+; more operations than a simple cons
+
+;;  * _ Exercise 5.37
+(compile '(+ 4 5) 'val 'next) ; =>
+((env) 
+ (env proc argl continue val) 
+ (
+  (assign proc (op lookup-variable-value) (const +) (reg env)) 
+  (assign val (const 5)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (const 4)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch36)) 
+  compiled-branch35 
+  (assign continue (label after-call34)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  primitive-branch36 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  after-call34))
+
+(compile '(define (increment x) (+ x 1)) 'val 'next) ; =>
+((env) 
+ (val) 
+ (
+  (assign val (op make-compiled-procedure) (label entry38) (reg env)) 
+  (goto (label after-lambda37)) entry38 
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (x)) (reg argl) (reg env)) 
+  (assign proc (op lookup-variable-value) (const +) (reg env)) 
+  (assign val (const 1)) 
+  (assign argl (op list) (reg val)) 
+  (assign val (op lookup-variable-value) (const x) (reg env)) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch41)) 
+  compiled-branch40 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  primitive-branch41 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  (goto (reg continue)) 
+  after-call39 
+  after-lambda37 
+  (perform (op define-variable!) (const increment) (reg val) (reg env)) 
+  (assign val (const ok))))
+
+; with modified preserving
+(define (preserving regs seq1 seq2)
+  (if (null? regs)
+      (append-instruction-sequences seq1 seq2)
+      (let ((first-reg (car regs)))
+	(preserving (cdr regs)
+		    (make-instruction-sequence
+		     (list-union (list first-reg)
+				 (registers-needed seq1))
+		     (list-difference (registers-modified seq1)
+				      (list first-reg))
+		     (append `((save ,first-reg))
+			     (statements seq1)
+			     `((restore ,first-reg))))
+		    seq2))))
+
+(compile '(+ 4 5) 'val 'next) ; =>
+;; all calls to save and restore are new! none are needed!
+((env continue) 
+ (env proc argl continue val) 
+ ((save continue) 
+  (save env) 
+  (save continue) 
+  (assign proc (op lookup-variable-value) (const +) (reg env)) 
+  (restore continue) 
+  (restore env) 
+  (restore continue) 
+  (save continue) 
+  (save proc) 
+  (save env) 
+  (save continue) 
+  (assign val (const 5)) 
+  (restore continue) 
+  (assign argl (op list) (reg val)) 
+  (restore env) 
+  (save argl) 
+  (save continue) 
+  (assign val (const 4)) 
+  (restore continue) 
+  (restore argl) 
+  (assign argl (op cons) (reg val) (reg argl))
+  (restore proc) 
+  (restore continue) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch44)) 
+  compiled-branch43 
+  (assign continue (label after-call42)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  primitive-branch44 
+  (save continue) 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  (restore continue) 
+  after-call42))
+
+(compile '(define (increment x) (+ x 1)) 'val 'next) ; =>
+;; again, all calls to save and restore are new! none are needed!
+((continue env) 
+ (val) 
+ (
+  (save continue) 
+  (save env) 
+  (save continue) 
+  (assign val (op make-compiled-procedure) (label entry46) (reg env)) 
+  (restore continue) 
+  (goto (label after-lambda45)) 
+  entry46 
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (x)) (reg argl) (reg env)) 
+  (save continue) 
+  (save env) 
+  (save continue) 
+  (assign proc (op lookup-variable-value) (const +) (reg env)) 
+  (restore continue) 
+  (restore env) 
+  (restore continue) 
+  (save continue) 
+  (save proc) 
+  (save env) 
+  (save continue) 
+  (assign val (const 1)) 
+  (restore continue) 
+  (assign argl (op list) (reg val)) 
+  (restore env) 
+  (save argl) 
+  (save continue) 
+  (assign val (op lookup-variable-value) (const x) (reg env)) 
+  (restore continue) 
+  (restore argl) 
+  (assign argl (op cons) (reg val) (reg argl)) 
+  (restore proc) 
+  (restore continue) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch49)) 
+  compiled-branch48 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  primitive-branch49 
+  (save continue) 
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  (restore continue) 
+  (goto (reg continue)) 
+  after-call47 
+  after-lambda45 
+  (restore env) 
+  (perform (op define-variable!) (const increment) (reg val) (reg env)) 
+  (assign val (const ok)) 
+  (restore continue)))
+
+;;  * _ Exercise 5.38
+
+; a. spread-arguments
+(define (spread-arguments operand-codes final-code)
+  (append-instruction-sequences
+     (compile (car operand-codes) 'arg1 'next)
+     (preserving '(arg1)
+		 (compile (cadr operand-codes) 'arg2 'next)
+		 final-code)))
+
+; b. primitives
+(define (plus? exp) (tagged-list? exp '+))
+(define (minus? exp) (tagged-list? exp '-))
+(define (multiply? exp) (tagged-list? exp '*))
+(define (equals? exp) (tagged-list? exp '=))
+(define (divide? exp) (tagged-list? exp '/))
+
+(define (compile-open-coded op exp target linkage)
+  (end-with-linkage
+   linkage
+   (spread-arguments (cdr exp)
+    (make-instruction-sequence '(arg1 arg2) (list target)
+      `(
+	(assign ,target (op ,op) (reg arg1) (reg arg2)))))))
+
+(define (compile-plus exp target linkage) (compile-open-coded '+ exp target linkage))
+(define (compile-minus exp target linkage) (compile-open-coded '- exp target linkage))
+(define (compile-multiply exp target linkage) (compile-open-coded '* exp target linkage))
+(define (compile-equals exp target linkage) (compile-open-coded '= exp target linkage))
+(define (compile-divide exp target linkage) (compile-open-coded '/ exp target linkage))
+
+(define (compile exp target linkage)
+  (cond ((self-evaluating? exp)
+         (compile-self-evaluating exp target linkage))
+        ((quoted? exp) (compile-quoted exp target linkage))
+        ((variable? exp)
+         (compile-variable exp target linkage))
+        ((assignment? exp)
+         (compile-assignment exp target linkage))
+        ((definition? exp)
+         (compile-definition exp target linkage))
+        ((if? exp) (compile-if exp target linkage))
+        ((lambda? exp) (compile-lambda exp target linkage))
+        ((begin? exp)
+         (compile-sequence (begin-actions exp)
+                           target
+                           linkage))
+        ((cond? exp) (compile (cond->if exp) target linkage))
+
+	((plus? exp) (compile-plus exp target linkage))
+	((minus? exp) (compile-minus exp target linkage))
+	((multiply? exp) (compile-multiply exp target linkage))
+	((equals? exp) (compile-equals exp target linkage))
+	;; etc.
+
+        ((application? exp)
+         (compile-application exp target linkage))
+        (else
+         (error "Unknown expression type -- COMPILE" exp))))
+
+(compile '(+ 4 5) 'val 'next)
+(compile '(+ (+ 1 2) (+ 5 0)) 'val 'next)
+
+; c. skipped
+(compile
+ '(define (factorial n)
+  (if (= n 1)
+      1
+      (* (factorial (- n 1)) n)))
+ 'val
+ 'next) ; => below
+
+(
+ (env) 
+ (val) 
+ (
+  (assign val (op make-compiled-procedure) (label entry138) (reg env)) 
+  (goto (label after-lambda137)) 
+  entry138 
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (n)) (reg argl) (reg env)) 
+  (assign arg1 (op lookup-variable-value) (const n) (reg env)) 
+  (assign arg2 (const 1)) 
+  (assign val (op =) (reg arg1) (reg arg2)) 
+  (test (op false?) (reg val)) 
+  (branch (label false-branch140)) 
+  true-branch141 
+  (assign val (const 1)) 
+  (goto (reg continue)) 
+  false-branch140 
+  (save continue) 
+  (assign proc (op lookup-variable-value) (const factorial) (reg env)) 
+  (assign arg1 (op lookup-variable-value) (const n) (reg env)) 
+  (assign arg2 (const 1)) 
+  (assign val (op -) (reg arg1) (reg arg2)) 
+  (assign argl (op list) (reg val)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch144)) 
+  compiled-branch143 
+  (assign continue (label proc-return145)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  proc-return145 
+  (assign arg1 (reg val)) 
+  (goto (label after-call142)) 
+  primitive-branch144 
+  (assign arg1 (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  after-call142 
+  (assign arg2 (op lookup-variable-value) (const n) (reg env)) 
+  (assign val (op *) (reg arg1) (reg arg2)) 
+  (restore continue) 
+  (goto (reg continue)) 
+  after-if139 after-lambda137 
+  (perform (op define-variable!) (const factorial) (reg val) (reg env)) 
+  (assign val (const ok))))
+
+
+; d.
+; conceptually, compile-plus should replace (+ 1 2 3) with (+ (+ 1 2) 3)
