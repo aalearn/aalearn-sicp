@@ -184,6 +184,8 @@ ev-application
   (goto (label eval-dispatch))
 ev-operator-symbol
   (assign proc (op lookup-variable-value) (reg exp) (reg env))
+  (test (op unbound-variable-error?) (reg val))
+  (branch (label signal-error))
   (goto (label ev-appl-did-operator-symbol))
 
 ev-appl-did-operator
@@ -194,8 +196,8 @@ ev-appl-did-operator-symbol
   (assign argl (op empty-arglist))
   (test (op no-operands?) (reg unev))
   (branch (label apply-dispatch))
-;  (test (op compound-procedure?) (reg proc))   ; lazy evaluation
-;  (branch (label ev-lazy-appl-operand-loop))   ; "
+  (test (op compound-procedure?) (reg proc))   ; lazy evaluation
+  (branch (label ev-lazy-appl-operand-loop))   ; "
   (save proc)
 ev-appl-operand-loop
   (save argl)

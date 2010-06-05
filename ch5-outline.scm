@@ -1370,9 +1370,9 @@ after-lambda18
 
   ;; * construct additional call to iter
   (assign proc (op lookup-variable-value) (const iter) (reg env)) 
-  (save continue)		  ; * additional stack usage: save continue
-  (save proc)			  ; * additional stack usage: save proc
-  (save env)			  ; * additional stack usage: save env
+  (save continue)		  
+  (save proc)			 
+  (save env)			
 
   ;; compute (+ n 1)
   (assign proc (op lookup-variable-value) (const +) (reg env)) 
@@ -1410,8 +1410,11 @@ after-lambda18
   (assign argl (op cons) (reg val) (reg argl)) 
 
   ;; * actual call to iter
-  (restore proc) 			; * additional stack usage: restore proc
-  (restore continue) 			; * additional stack usage: restore continue
+  (restore proc) 		
+  (restore continue) 			; * reduced stack usage, since we can just
+					; use the prior version of continue, instead of 
+					; saving it and trying something different
+
   (test (op primitive-procedure?) (reg proc)) 
   (branch (label primitive-branch19)) 
   compiled-branch18 
@@ -1697,7 +1700,6 @@ after-lambda18
 (define (compile-multiply exp target linkage) (compile-open-coded '* exp target linkage))
 (define (compile-equals exp target linkage) (compile-open-coded '= exp target linkage))
 (define (compile-divide exp target linkage) (compile-open-coded '/ exp target linkage))
-; etc...
 
 (define (compile exp target linkage)
   (cond ((self-evaluating? exp)
@@ -1718,9 +1720,9 @@ after-lambda18
         ((cond? exp) (compile (cond->if exp) target linkage))
 
 	((plus? exp) (compile-plus exp target linkage))
-	((minus? exp?) (compile-minus exp target linkage))
-	((multiply? exp?) (compile-multiply exp target linkage))
-	((equals? exp?) (compile-equals exp target linkage))
+	((minus? exp) (compile-minus exp target linkage))
+	((multiply? exp) (compile-multiply exp target linkage))
+	((equals? exp) (compile-equals exp target linkage))
 	;; etc.
 
         ((application? exp)
@@ -1728,11 +1730,62 @@ after-lambda18
         (else
          (error "Unknown expression type -- COMPILE" exp))))
 
-
 (compile '(+ 4 5) 'val 'next)
 (compile '(+ (+ 1 2) (+ 5 0)) 'val 'next)
 
 ; c. skipped
+(compile
+ '(define (factorial n)
+  (if (= n 1)
+      1
+      (* (factorial (- n 1)) n)))
+ 'val
+ 'next) ; => below
+
+(
+ (env) 
+ (val) 
+ (
+  (assign val (op make-compiled-procedure) (label entry138) (reg env)) 
+  (goto (label after-lambda137)) 
+  entry138 
+  (assign env (op compiled-procedure-env) (reg proc)) 
+  (assign env (op extend-environment) (const (n)) (reg argl) (reg env)) 
+  (assign arg1 (op lookup-variable-value) (const n) (reg env)) 
+  (assign arg2 (const 1)) 
+  (assign val (op =) (reg arg1) (reg arg2)) 
+  (test (op false?) (reg val)) 
+  (branch (label false-branch140)) 
+  true-branch141 
+  (assign val (const 1)) 
+  (goto (reg continue)) 
+  false-branch140 
+  (save continue) 
+  (assign proc (op lookup-variable-value) (const factorial) (reg env)) 
+  (assign arg1 (op lookup-variable-value) (const n) (reg env)) 
+  (assign arg2 (const 1)) 
+  (assign val (op -) (reg arg1) (reg arg2)) 
+  (assign argl (op list) (reg val)) 
+  (test (op primitive-procedure?) (reg proc)) 
+  (branch (label primitive-branch144)) 
+  compiled-branch143 
+  (assign continue (label proc-return145)) 
+  (assign val (op compiled-procedure-entry) (reg proc)) 
+  (goto (reg val)) 
+  proc-return145 
+  (assign arg1 (reg val)) 
+  (goto (label after-call142)) 
+  primitive-branch144 
+  (assign arg1 (op apply-primitive-procedure) (reg proc) (reg argl)) 
+  after-call142 
+  (assign arg2 (op lookup-variable-value) (const n) (reg env)) 
+  (assign val (op *) (reg arg1) (reg arg2)) 
+  (restore continue) 
+  (goto (reg continue)) 
+  after-if139 after-lambda137 
+  (perform (op define-variable!) (const factorial) (reg val) (reg env)) 
+  (assign val (const ok))))
+
 
 ; d.
-; conceptually, compile-plus should replace (+ 1 2 3) with (+ (+ 1 2)
+; conceptually, compile-plus should replace (+ 1 2 3) with (+ (+ 1 2) 3)
