@@ -1733,7 +1733,7 @@ after-lambda18
 (compile '(+ 4 5) 'val 'next)
 (compile '(+ (+ 1 2) (+ 5 0)) 'val 'next)
 
-; c. skipped
+; c.
 (compile
  '(define (factorial n)
   (if (= n 1)
@@ -1789,3 +1789,53 @@ after-lambda18
 
 ; d.
 ; conceptually, compile-plus should replace (+ 1 2 3) with (+ (+ 1 2) 3)
+(define (compile-plus exp target linkage)
+  (if (null? (cdddr exp))
+      (compile-open-coded '+ exp target linkage)
+      (compile-plus 
+       (cons '+ (cons (compile-open-coded '+ (cadr exp) (caddr exp))
+		      (cdddr exp))))))
+
+(define (compile-multiply exp target linkage)
+  (if (null? (cdddr exp))
+      (compile-open-coded '* exp target linkage)
+      (compile-multiply 
+       (cons '* (cons (compile-open-coded '* (cadr exp) (caddr exp))
+		      (cdddr exp))))))
+
+;;  * _ Exercise 5.39
+; use pairs for addresses
+(define (dec-first address)
+  (cons (- (car address) 1) (cdr address)))
+
+(define (lexical-address-lookup address env)
+  (if (> (car address) 0)
+      (lexical-address-lookup
+       (dec-first address)
+       (enclosing-environment env))
+      (let ((value (list-ref 
+		    (frame-values (first-frame env)
+		    (cdr address))))
+	(if (= value '*unassigned*)
+	    (error "ERROR: unassigned value")
+	    value))))
+
+(define (lexical-address-set! address val env)
+  (define (set-nth! items n val)
+    (if (> n 0)
+	(set-nth (cdr items) (- n 1) val)
+	(set-car! items val)))
+  (if (> (car address) 0)
+      (lexical-address-set!
+       (dec-first address)
+       val
+       (enclosing-environment env))
+      (set-nth! 
+       (frame-values (first-frame env)) 
+       (cdr address)
+       val)))
+
+
+;;  * _ Exercise 5.40
+
+
