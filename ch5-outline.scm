@@ -1805,17 +1805,17 @@ after-lambda18
 
 ;;  * _ Exercise 5.39
 ; use pairs for addresses
-(define (dec-first address)
+(define (dec-car address)
   (cons (- (car address) 1) (cdr address)))
 
 (define (lexical-address-lookup address env)
   (if (> (car address) 0)
       (lexical-address-lookup
-       (dec-first address)
+       (dec-car address)
        (enclosing-environment env))
       (let ((value (list-ref 
 		    (frame-values (first-frame env)
-		    (cdr address))))
+		    (cadr address)))))
 	(if (= value '*unassigned*)
 	    (error "ERROR: unassigned value")
 	    value))))
@@ -1832,10 +1832,28 @@ after-lambda18
        (enclosing-environment env))
       (set-nth! 
        (frame-values (first-frame env)) 
-       (cdr address)
+       (cadr address)
        val)))
 
 
 ;;  * _ Exercise 5.40
+; see commit a6d4129443b184ddce7ae992cf618bc81aa837e2
+
+;;  * _ Exercise 5.41
+; see commit a6d4129443b184ddce7ae992cf618bc81aa837e2
+(define (list-index-eq x items) (list-index (lambda (i) (eq? x i)) items))
+
+(define (find-variable var compile-time-env)
+  (define (search-frame i env)
+    (if (null? env)
+	'not-found
+	(let ((j (list-index-eq var (car env))))
+	  (if j
+	      (list i j)
+	      (search-frame (+ i 1) (cdr env))))))
+  (search-frame 0 compile-time-env))
 
 
+(find-variable 'c '((y z) (a b c d e) (x y))) ; => (1 2)
+(find-variable 'x '((y z) (a b c d e) (x y))) ; => (2 0)
+(find-variable 'w '((y z) (a b c d e) (x y))) ; => not-found
