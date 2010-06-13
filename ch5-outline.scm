@@ -1804,7 +1804,6 @@ after-lambda18
 		      (cdddr exp))))))
 
 ;;  * _ Exercise 5.39
-; use pairs for addresses
 (define (dec-car address)
   (cons (- (car address) 1) (cdr address)))
 
@@ -1816,7 +1815,7 @@ after-lambda18
       (let ((value (list-ref 
 		    (frame-values (first-frame env)
 		    (cadr address)))))
-	(if (= value '*unassigned*)
+	(if (eq? value '*unassigned*)
 	    (error "ERROR: unassigned value")
 	    value))))
 
@@ -1857,3 +1856,21 @@ after-lambda18
 (find-variable 'c '((y z) (a b c d e) (x y))) ; => (1 2)
 (find-variable 'x '((y z) (a b c d e) (x y))) ; => (2 0)
 (find-variable 'w '((y z) (a b c d e) (x y))) ; => not-found
+
+;;  * _ Exercise 5.42
+(compile
+ '(define (funny-square n)
+    ((lambda (x) (* x n)) n))
+ 'val
+ 'next
+ '()) ; => looks ok
+
+(compile
+ '(let ((x 3) (y 4))
+    (lambda (a b c d e)
+      (let ((y (* a b x))
+	    (z (+ c d x)))
+	(* x y z))))
+ 'val
+ 'next
+ '()) ; => looks ok

@@ -83,9 +83,13 @@
    (list 'adjoin-arg adjoin-arg)
    (list 'last-operand? last-operand?)
    (list 'no-more-exps? no-more-exps?)	;for non-tail-recursive machine
-   (list 'get-global-environment get-global-environment))
+   (list 'get-global-environment get-global-environment)
 
-   )
+   ;;operations in ch5-outline.scm 
+   (list 'lexical-address-lookup lexical-address-lookup)
+   (list 'lexical-address-set! lexical-address-set!)
+
+   ))
 
 (define eceval
   (make-machine
