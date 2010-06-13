@@ -209,7 +209,7 @@
                 (const ,formals)
                 (reg argl)
                 (reg env))))
-     (compile-sequence (lambda-body exp) 'val 'return 
+     (compile-sequence (scan-out-defines (lambda-body exp)) 'val 'return 
 		       (cons formals compile-time-env)))))
 
 

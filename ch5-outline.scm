@@ -1837,6 +1837,7 @@ after-lambda18
 
 ;;  * _ Exercise 5.40
 ; see commit a6d4129443b184ddce7ae992cf618bc81aa837e2
+; addnl fixes: commit 57e8e5f43f9d8c0a3f66b25fb12ad65b80472811
 
 ;;  * _ Exercise 5.41
 ; see commit a6d4129443b184ddce7ae992cf618bc81aa837e2
@@ -1874,3 +1875,49 @@ after-lambda18
  'val
  'next
  '()) ; => looks ok
+
+;; see diffs in commit 57e8e5f43f9d8c0a3f66b25fb12ad65b80472811
+
+;;  * _ Exercise 5.43
+
+;; from ex. 4.7
+(define (make-let assignments body)
+  (cons 'let (cons assignments body)))
+
+(define (make-assignment var val)
+  (list 'set! var val))
+
+;; from exercise 4.16, modified to add if
+(define (scan-out-defines body)
+  (let ((defines (filter definition? body))
+	(non-defines (filter (lambda (x) (not (definition? x))) body)))
+    (if (> (length defines) 0)
+	(make-let 
+	 (map (lambda (x) (list (definition-variable x) '*unassigned*)) defines)
+	 (append
+	  (map (lambda (x) (make-assignment (definition-variable x) (definition-value x))) defines)
+	  non-defines))
+	body)))
+
+; called in compile-definition
+; ...(compile (definition-value (scan-out-defines exp)) 'val 'next compile-time-env)...
+(scan-out-defines '((lambda (x) (* x n)) n))
+
+(compile
+ '(define (funny-square n)
+    ((lambda (x) (* x n)) (+ n 0)))
+ 'val
+ 'next
+ '()) ; => looks ok
+
+(compile
+ '(define (funny-square n)
+    (define (even? x) (= (remainder x 2) 0))
+    (if (even? n)
+	(* n n)
+	(* n n)))
+ 'val
+ 'next
+ '()) ; => works, didn't check in detail
+
+
