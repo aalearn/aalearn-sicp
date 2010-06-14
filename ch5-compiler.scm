@@ -88,7 +88,7 @@
   (end-with-linkage linkage
    (make-instruction-sequence '(env) (list target)
     (let ((address (find-variable exp compile-time-env)))
-      (if address
+      (if (not (eq? address 'not-found))
 	  `((assign ,target
 		    (op lexical-address-lookup)
 		    (const ,address)

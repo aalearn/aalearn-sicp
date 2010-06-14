@@ -1803,6 +1803,13 @@ after-lambda18
        (cons '* (cons (compile-open-coded '* (cadr exp) (caddr exp))
 		      (cdddr exp))))))
 
+; problems with these! the calls to compile-open-coded are wrong
+; mixing the literal '+ with some compiled code!
+
+; 17:22 inimino: yeah maybe something like (let (nested-expr (n-ary-to-nested exp))) and then compile that normally?
+
+
+
 ;;  * _ Exercise 5.39
 (define (dec-car address)
   (cons (- (car address) 1) (cdr address)))
@@ -1813,8 +1820,8 @@ after-lambda18
        (dec-car address)
        (enclosing-environment env))
       (let ((value (list-ref 
-		    (frame-values (first-frame env)
-		    (cadr address)))))
+		    (frame-values (first-frame env))
+		    (cadr address))))
 	(if (eq? value '*unassigned*)
 	    (error "ERROR: unassigned value")
 	    value))))
@@ -1822,11 +1829,11 @@ after-lambda18
 (define (lexical-address-set! address val env)
   (define (set-nth! items n val)
     (if (> n 0)
-	(set-nth (cdr items) (- n 1) val)
+	(set-nth! (cdr items) (- n 1) val)
 	(set-car! items val)))
   (if (> (car address) 0)
       (lexical-address-set!
-       (dec-first address)
+       (dec-car address)
        val
        (enclosing-environment env))
       (set-nth! 
@@ -1919,6 +1926,78 @@ after-lambda18
  'val
  'next
  '()) ; => works, didn't check in detail
+
+; trying out another one
+(pp (compile '(define (f x) (define (g x) (* x x)) (g x)) 'val 'next '()))
+
+ ((env)
+ (val)
+ ((assign val (op make-compiled-procedure) (label entry188) (reg env))
+  (goto (label after-lambda187))
+  entry188
+  (assign env (op compiled-procedure-env) (reg proc))
+  (assign env (op extend-environment) (const (x)) (reg argl) (reg env))
+  (assign env (op get-global-environment))
+  (assign val (op lookup-variable-value) (const let) (reg env))
+  (save continue)
+  (save env)
+  (assign env (op get-global-environment))
+  (assign proc (op lookup-variable-value) (const g) (reg env))
+  (assign env (op get-global-environment))
+  (assign val (op lookup-variable-value) (const *unassigned*) (reg env))
+  (assign argl (op list) (reg val))
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-branch196))
+  compiled-branch195
+  (assign continue (label proc-return197))
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+  proc-return197
+  (assign proc (reg val))
+  (goto (label after-call194))
+  primitive-branch196
+  (assign proc (op apply-primitive-procedure) (reg proc) (reg argl))
+  after-call194
+  (assign argl (const ()))
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-branch200))
+  compiled-branch199
+  (assign continue (label after-call198))
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+  primitive-branch200
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
+  after-call198
+  (restore env)
+  (restore continue)
+  (assign val (op make-compiled-procedure) (label entry193) (reg env))
+  (goto (label after-lambda192))
+  entry193
+  (assign env (op compiled-procedure-env) (reg proc))
+  (assign env (op extend-environment) (const (x)) (reg argl) (reg env))
+  (assign arg1 (op lexical-address-lookup) (const (0 0)) (reg env))
+  (assign arg2 (op lexical-address-lookup) (const (0 0)) (reg env))
+  (assign val (op *) (reg arg1) (reg arg2))
+  (goto (reg continue))
+  after-lambda192
+  (perform (op set-variable-value!) (const g) (reg val) (reg env))
+  (assign val (const ok))
+  (assign env (op get-global-environment))
+  (assign proc (op lookup-variable-value) (const g) (reg env))
+  (assign val (op lexical-address-lookup) (const (0 0)) (reg env))
+  (assign argl (op list) (reg val))
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-branch191))
+  compiled-branch190
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+  primitive-branch191
+  (assign val (op apply-primitive-procedure) (reg proc) (reg argl))
+  (goto (reg continue))
+  after-call189
+  after-lambda187
+  (perform (op define-variable!) (const f) (reg val) (reg env))
+  (assign val (const ok))))
 
 
 ;;  * _ Exercise 5.44
