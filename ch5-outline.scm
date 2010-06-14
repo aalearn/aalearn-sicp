@@ -1921,3 +1921,67 @@ after-lambda18
  '()) ; => works, didn't check in detail
 
 
+;;  * _ Exercise 5.44
+;; slightly modifying approach previously used for open coding
+(define (spread-arguments operand-codes final-code compile-time-env)
+  (append-instruction-sequences
+     (compile (car operand-codes) 'arg1 'next compile-time-env)
+     (preserving '(arg1)
+		 (compile (cadr operand-codes) 'arg2 'next compile-time-env)
+		 final-code)))
+
+(define (open-codeable? exp compile-time-env)
+  (and (memq (car exp) '(+ - * /))
+       (eq? 'not-found (find-variable (car exp) compile-time-env))))
+
+(open-codeable? '(+ 4 5) '()) ; => #t
+
+(define (open-coded-version original-op)
+  (cadr (assoc original-op '((+ +) (- -) (* *) (/ /)))))
+
+(define (compile-open-coded exp target linkage compile-time-env)
+  (let ((op (open-coded-version (car exp))))
+    (end-with-linkage linkage
+     (spread-arguments (cdr exp)
+      (make-instruction-sequence '(arg1 arg2) (list target)
+       `(
+	 (assign ,target (op ,op) (reg arg1) (reg arg2))))
+      compile-time-env))))
+
+(define (compile exp target linkage compile-time-env)
+  (cond ((self-evaluating? exp)
+         (compile-self-evaluating exp target linkage compile-time-env))
+        ((quoted? exp) 
+	 (compile-quoted exp target linkage compile-time-env))
+        ((variable? exp)
+         (compile-variable exp target linkage compile-time-env))
+        ((assignment? exp)
+         (compile-assignment exp target linkage compile-time-env))
+        ((definition? exp)
+         (compile-definition exp target linkage compile-time-env))
+        ((if? exp) 
+	 (compile-if exp target linkage compile-time-env))
+        ((lambda? exp) 
+	 (compile-lambda exp target linkage compile-time-env))
+        ((begin? exp)
+         (compile-sequence (begin-actions exp)
+                           target
+                           linkage
+			   compile-time-env))
+        ((cond? exp) 
+	 (compile (cond->if exp) target linkage compile-time-env))
+
+	((open-codeable? exp compile-time-env) 
+	 (compile-open-coded exp target linkage compile-time-env))
+
+        ((application? exp)
+         (compile-application exp target linkage compile-time-env))
+        (else
+         (error "Unknown expression type -- COMPILE" exp))))
+
+(compile
+ '(+ (* 2 3) (+ 4 5))
+ 'val
+ 'next
+ '()) ; => looks ok
+
