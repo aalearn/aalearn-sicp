@@ -2050,7 +2050,7 @@ after-lambda18
         ((cond? exp) 
 	 (compile (cond->if exp) target linkage compile-time-env))
 
-	((open-codeable? exp compile-time-env) 
+        ((open-codeable? exp compile-time-env) 
 	 (compile-open-coded exp target linkage compile-time-env))
 
         ((application? exp)
@@ -2064,3 +2064,212 @@ after-lambda18
  'next
  '()) ; => looks ok
 
+(pp (compile '(define (f * x y) (+ (* x x) (* y y))) 'val 'next '()))
+; =>
+((env)
+ (val)
+ ((assign val (op make-compiled-procedure) (label entry202) (reg env))
+  (goto (label after-lambda201))
+  entry202
+  (assign env (op compiled-procedure-env) (reg proc))
+  (assign env (op extend-environment) (const (* x y)) (reg argl) (reg env))
+  (save continue)
+  (assign proc (op lexical-address-lookup) (const (0 0)) (reg env))
+  (assign val (op lexical-address-lookup) (const (0 1)) (reg env))
+  (assign argl (op list) (reg val))
+  (assign val (op lexical-address-lookup) (const (0 1)) (reg env))
+  (assign argl (op cons) (reg val) (reg argl))
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-branch209))
+  compiled-branch208
+  (assign continue (label proc-return210))
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+  proc-return210
+  (assign arg1 (reg val))
+  (goto (label after-call207))
+  primitive-branch209
+  (assign arg1 (op apply-primitive-procedure) (reg proc) (reg argl))
+  after-call207
+  (assign proc (op lexical-address-lookup) (const (0 0)) (reg env))
+  (assign val (op lexical-address-lookup) (const (0 2)) (reg env))
+  (assign argl (op list) (reg val))
+  (assign val (op lexical-address-lookup) (const (0 2)) (reg env))
+  (assign argl (op cons) (reg val) (reg argl))
+  (test (op primitive-procedure?) (reg proc))
+  (branch (label primitive-branch205))
+  compiled-branch204
+  (assign continue (label proc-return206))
+  (assign val (op compiled-procedure-entry) (reg proc))
+  (goto (reg val))
+  proc-return206
+  (assign arg2 (reg val))
+  (goto (label after-call203))
+  primitive-branch205
+  (assign arg2 (op apply-primitive-procedure) (reg proc) (reg argl))
+  after-call203
+  (assign val (op +) (reg arg1) (reg arg2))
+  (restore continue)
+  (goto (reg continue))
+  after-lambda201
+  (perform (op define-variable!) (const f) (reg val) (reg env))
+  (assign val (const ok))))
+
+;;  * _ Exercise 5.45
+; a. 
+;  in 5.27, the evaluator required: 
+;   maximum-depth: 5n + 3
+;   total-pushes:  32n - 16
+;  in 5.14, the special purpose machine required:
+;   maximum-depth: 2n - 2
+;   total-pushes:  2n - 2
+;  the compile code examples:
+;   n = 5: total-pushes 31, max-depth 14
+;   n = 6: total-pushes 37, max-depth 17
+;   n = 7: total-pushes 43, max-depth 20
+;  so generally for the compiled code:
+;   maximum-depth: 3n - 1
+;   total-pushes:  6n + 1
+; 
+;  When computing ratios, assume large n & ignore constant addend
+;  So the ratios for compiled vs. eval'd and special-purpose vs. eval'd are:
+;   maximum-depth: 3/5 (compiled) and 2/5 (special-purpose)
+;   total-pushes: 3/16 (compiled) and 1/16 (special-purpose)
+
+; b. Certainly some optimization can be achieved by open-coding
+;   the =, *, and - values.  Looking up these procedures do cause
+;   additional unneeded saves, and restores.
+;
+;  Additionally, it seems possible to avoid the lookup to factorial,
+;   or at least looking it up, immediately saving it, then restoring it later.
+;   This would work as follows: the compiler detects that nothing inside
+;   the call to factorial redefines factorial.  Then, it would remove:
+;   (assign proc
+;          (op lookup-variable-value) (const factorial) (reg env))
+;   (save proc)
+;   ...
+;   (restore proc)
+
+;;  * _ Exercise 5.46
+(compile-and-go
+ '(define (fib n)
+    (if (< n 2)
+	n
+	(+ (fib (- n 1)) (fib (- n 2))))))
+; compiled performance:
+;  n = 3: total-pushes = 27,  maximum-depth = 8
+;  n = 4: total-pushes = 47,  maximum-depth = 11
+;  n = 5: total-pushes = 77,  maximum-depth = 14
+;  n = 6: total-pushes = 127, maximum-depth = 17
+;  n = 7: total-pushes = 207, maximum-depth = 20
+;  n = 8: total-pushes = 337, maximum-depth = 23
+; => generally for any n
+;  maximum-depth = 3n - 1
+;  total-pushes = 10*Fib(n+1) - 3
+
+; interpreted performance (from 5.29):
+;  maximum-depth: 5n + 3
+;  total-pushes:  56*Fib(n+1) - 40
+
+(define fib-special-machine
+ (make-machine
+   '(n val continue)
+   (list (list '+ +) (list '- -) (list '= =) (list '< <))
+   '(
+controller
+   (assign continue (label fib-done))
+ fib-loop
+   (test (op <) (reg n) (const 2))
+   (branch (label immediate-answer))
+   ;; set up to compute Fib(n - 1)
+   (save continue)
+   (assign continue (label afterfib-n-1))
+   (save n)                           ; save old value of n
+   (assign n (op -) (reg n) (const 1)); clobber n to n - 1
+   (goto (label fib-loop))            ; perform recursive call
+ afterfib-n-1                         ; upon return, val contains Fib(n - 1)
+   (restore n)
+   (restore continue)
+   ;; set up to compute Fib(n - 2)
+   (assign n (op -) (reg n) (const 2))
+   (save continue)
+   (assign continue (label afterfib-n-2))
+   (save val)                         ; save Fib(n - 1)
+   (goto (label fib-loop))
+ afterfib-n-2                         ; upon return, val contains Fib(n - 2)
+   (assign n (reg val))               ; n now contains Fib(n - 2)
+   (restore val)                      ; val now contains Fib(n - 1)
+   (restore continue)
+   (assign val                        ;  Fib(n - 1) +  Fib(n - 2)
+           (op +) (reg val) (reg n)) 
+   (goto (reg continue))              ; return to caller, answer is in val
+ immediate-answer
+   (assign val (reg n))               ; base case:  Fib(n) = n
+   (goto (reg continue))
+ fib-done)))
+
+(define (quick-machine-fib n)
+  ((fib-special-machine 'stack) 'initialize)
+  (set-register-contents! fib-special-machine 'n n)
+  (start fib-special-machine) 
+  ((fib-special-machine 'stack) 'print-statistics)
+  (get-register-contents fib-special-machine 'val))
+
+(quick-machine-fib 3) ; => 2,  tp=8,   md=4
+(quick-machine-fib 4) ; => 3,  tp=16,  md=6
+(quick-machine-fib 5) ; => 5,  tp=28,  md=8
+(quick-machine-fib 6) ; => 8,  tp=48,  md=10
+(quick-machine-fib 7) ; => 13, tp=80,  md=12
+(quick-machine-fib 8) ; => 21, tp=132, md=14
+; => maximum-depth = 2n - 2
+;    total-depth = 4*Fib(n+1) - 4
+
+; so ratio of compiled and special-purpose to interpreted is:
+;  max-depth: 3/5 (compiled) and 2/5 (special-purpose)
+;  total-pushes: 5/28 (compiled) and 1/17 (special-purpose)
+
+; The book appears to be wrong, even though tp is not linear in n,
+;  the ratios do approach a constant independent of n, it seems.
+
+;;  * _ Exercise 5.47
+
+;;  * _ Exercise 5.48
+(define (compile-and-go expression)
+  (let ((instructions
+         (assemble (statements
+                    (compile expression 'val 'return))
+                   eceval)))
+    (set! the-global-environment (setup-environment))
+    (set-register-contents! eceval 'val instructions)
+    (set-register-contents! eceval 'flag true)
+    (start eceval)))
+
+(define (compile-and-run expression)
+  (let ((instructions
+         (assemble (statements
+                    (compile expression 'val 'return))
+                   eceval)))
+    instructions))
+
+(define primitive-procedures
+  (list (list 'car car)
+        (list 'cdr cdr)
+        (list 'cons cons)
+        (list 'null? null?)
+	;;above from book -- here are some more
+	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '= =)
+	(list '/ /)
+	(list '> >)
+	(list '< <)
+	; newly added
+	(list 'compile-and-run compile-and-run)
+        ))
+
+(set! the-global-environment (setup-environment))
+(set-register-contents! eceval 'flag false)
+(start eceval)
+
+; not working yet!
