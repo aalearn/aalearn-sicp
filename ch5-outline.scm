@@ -2233,11 +2233,13 @@ controller
 
 ;;  * _ Exercise 5.47
 
+
 ;;  * _ Exercise 5.48
+; modified to interface with "fast-compile"
 (define (compile-and-go expression)
   (let ((instructions
          (assemble (statements
-                    (compile expression 'val 'return))
+                    (compile expression 'val 'return '()))
                    eceval)))
     (set! the-global-environment (setup-environment))
     (set-register-contents! eceval 'val instructions)

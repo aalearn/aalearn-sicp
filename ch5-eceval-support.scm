@@ -213,3 +213,58 @@
 (define (compiled-procedure-entry c-proc) (cadr c-proc))
 (define (compiled-procedure-env c-proc) (caddr c-proc))
 
+
+;;  * _ Exercise 5.39 -- for lexical address functions
+(define (dec-car address)
+  (cons (- (car address) 1) (cdr address)))
+
+(define (lexical-address-lookup address env)
+  (if (> (car address) 0)
+      (lexical-address-lookup
+       (dec-car address)
+       (enclosing-environment env))
+      (let ((value (list-ref 
+		    (frame-values (first-frame env))
+		    (cadr address))))
+	(if (eq? value '*unassigned*)
+	    (error "ERROR: unassigned value")
+	    value))))
+
+(define (lexical-address-set! address val env)
+  (define (set-nth! items n val)
+    (if (> n 0)
+	(set-nth! (cdr items) (- n 1) val)
+	(set-car! items val)))
+  (if (> (car address) 0)
+      (lexical-address-set!
+       (dec-car address)
+       val
+       (enclosing-environment env))
+      (set-nth! 
+       (frame-values (first-frame env)) 
+       (cadr address)
+       val)))
+
+;; from exercise 4.16, modified to add if
+(define (scan-out-defines body)
+  (let ((defines (filter definition? body))
+	(non-defines (filter (lambda (x) (not (definition? x))) body)))
+    (if (> (length defines) 0)
+	(make-let 
+	 (map (lambda (x) (list (definition-variable x) '*unassigned*)) defines)
+	 (append
+	  (map (lambda (x) (make-assignment (definition-variable x) (definition-value x))) defines)
+	  non-defines))
+	body)))
+
+(define (list-index-eq x items) (list-index (lambda (i) (eq? x i)) items))
+
+(define (find-variable var compile-time-env)
+  (define (search-frame i env)
+    (if (null? env)
+	'not-found
+	(let ((j (list-index-eq var (car env))))
+	  (if j
+	      (list i j)
+	      (search-frame (+ i 1) (cdr env))))))
+  (search-frame 0 compile-time-env))
