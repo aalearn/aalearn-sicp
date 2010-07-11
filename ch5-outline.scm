@@ -2233,6 +2233,13 @@ controller
 
 ;;  * _ Exercise 5.47
 
+(compile-and-go
+ '(define (f) (+ 1 (g))))
+; then run (define (g) 4)
+; then run (g)
+; then run (f)
+; => 5
+
 
 ;;  * _ Exercise 5.48
 ; modified to interface with "fast-compile"
@@ -2275,3 +2282,17 @@ controller
 (start eceval)
 
 ; not working yet!
+
+; to test:
+;;; EC-Eval input:
+(compile-and-run
+ '(define (factorial n)
+    (if (= n 1)
+        1
+        (* (factorial (- n 1)) n))))
+;;; EC-Eval value:
+ok
+;;; EC-Eval input:
+(factorial 5)
+;;; EC-Eval value:
+120
