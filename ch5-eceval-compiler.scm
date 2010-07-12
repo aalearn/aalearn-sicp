@@ -56,6 +56,37 @@
     (set-register-contents! eceval 'val instructions)
     (set-register-contents! eceval 'flag true)
     (start eceval)))
+
+(define (compile-and-run? exp)
+  (tagged-list? exp 'compile-and-run))
+
+(define (compile-and-run expression)
+  (let ((instructions
+         (assemble (statements
+                    (compile (cdr expression) 'val 'return))
+                   eceval)))
+    instructions))
+
+;; redefining this, with an added one
+(define primitive-procedures
+  (list (list 'car car)
+        (list 'cdr cdr)
+        (list 'cons cons)
+        (list 'null? null?)
+	;;above from book -- here are some more
+	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '= =)
+	(list '/ /)
+	(list '> >)
+	(list '< <)
+
+	; additional for compiling
+	(list 'compile-and-run compile-and-run)
+        ))
+
+
 
 ;;**NB. To [not] monitor stack operations, comment in/[out] the line after
 ;; print-result in the machine controller below
@@ -128,6 +159,14 @@
    (list 'compiled-procedure? compiled-procedure?)
    (list 'compiled-procedure-entry compiled-procedure-entry)
    (list 'compiled-procedure-env compiled-procedure-env)
+
+   ;;operations in ch5-outline.scm 
+   (list 'lexical-address-lookup lexical-address-lookup)
+   (list 'lexical-address-set! lexical-address-set!)
+
+   (list 'compile-and-run? compile-and-run?)
+   (list 'compile-and-run compile-and-run)
+
    ))
 
 (define eceval
@@ -192,6 +231,10 @@ eval-dispatch
   (branch (label ev-definition))
   (test (op if?) (reg exp))
   (branch (label ev-if))
+
+  (test (op compile-and-run?) (reg exp))
+  (branch (label compile-and-run))
+
   (test (op lambda?) (reg exp))
   (branch (label ev-lambda))
   (test (op begin?) (reg exp))
@@ -285,7 +328,15 @@ compound-apply
   (assign env (op extend-environment)
               (reg unev) (reg argl) (reg env))
   (assign unev (op procedure-body) (reg proc))
+
   (goto (label ev-sequence))
+
+;; compile and run
+compile-and-run
+  (assign val (op compile-and-run) (reg exp))
+  (assign env (op get-global-environment))
+  (assign continue (label print-result))
+  (goto (reg val))
 
 ;;;SECTION 5.4.2
 ev-begin

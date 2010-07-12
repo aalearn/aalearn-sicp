@@ -2240,48 +2240,26 @@ controller
 ; then run (f)
 ; => 5
 
+; changes in ch5-compiler.scm
+;  commit: 5233c7863e073e5dcbea5e5b5d8818eb0cdfa218
 
 ;;  * _ Exercise 5.48
-; modified to interface with "fast-compile"
-(define (compile-and-go expression)
-  (let ((instructions
-         (assemble (statements
-                    (compile expression 'val 'return '()))
-                   eceval)))
-    (set! the-global-environment (setup-environment))
-    (set-register-contents! eceval 'val instructions)
-    (set-register-contents! eceval 'flag true)
-    (start eceval)))
 
-(define (compile-and-run expression)
-  (let ((instructions
-         (assemble (statements
-                    (compile expression 'val 'return))
-                   eceval)))
-    instructions))
+; Idea is to first compile and assemble the code provided
+; Then to get this into exp
+; Then to call ev-dispatch on it
 
-(define primitive-procedures
-  (list (list 'car car)
-        (list 'cdr cdr)
-        (list 'cons cons)
-        (list 'null? null?)
-	;;above from book -- here are some more
-	(list '+ +)
-	(list '- -)
-	(list '* *)
-	(list '= =)
-	(list '/ /)
-	(list '> >)
-	(list '< <)
-	; newly added
-	(list 'compile-and-run compile-and-run)
-        ))
+; When we start applying a primitive, we have continue = print result
+; In this case, we need to save that, and try a different one.
 
-(set! the-global-environment (setup-environment))
-(set-register-contents! eceval 'flag false)
-(start eceval)
+; compile-and-run in ch5-eceval-compiler.scm
 
-; not working yet!
+(define (fresh-start-eceval)
+  (set! the-global-environment (setup-environment))
+  (set-register-contents! eceval 'flag false)
+  (start eceval))
+
+(fresh-start-eceval)
 
 ; to test:
 ;;; EC-Eval input:
@@ -2296,3 +2274,5 @@ ok
 (factorial 5)
 ;;; EC-Eval value:
 120
+
+; NOT WORKING!
