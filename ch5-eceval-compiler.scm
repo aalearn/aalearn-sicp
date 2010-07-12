@@ -60,12 +60,14 @@
 (define (compile-and-run? exp)
   (tagged-list? exp 'compile-and-run))
 
+(define (compile-and-run-code expression) (cadr expression))
+
 (define (compile-and-run expression)
   (let ((instructions
          (assemble (statements
-                    (compile (cdr expression) 'val 'return))
+                    (compile expression 'val 'return))
                    eceval)))
-    instructions))
+    (set-register-contents! eceval 'val instructions)))
 
 ;; redefining this, with an added one
 (define primitive-procedures
@@ -83,6 +85,7 @@
 	(list '< <)
 
 	; additional for compiling
+	(list 'compile-and-run-code compile-and-run-code)
 	(list 'compile-and-run compile-and-run)
         ))
 
@@ -165,6 +168,7 @@
    (list 'lexical-address-set! lexical-address-set!)
 
    (list 'compile-and-run? compile-and-run?)
+   (list 'compile-and-run-code compile-and-run-code)
    (list 'compile-and-run compile-and-run)
 
    ))
@@ -333,7 +337,12 @@ compound-apply
 
 ;; compile and run
 compile-and-run
-  (assign val (op compile-and-run) (reg exp))
+  (assign exp (op compile-and-run-code) (reg exp))
+  (assign continue (label compile-and-run-finish))
+  (goto (label eval-dispatch))
+
+compile-and-run-finish
+  (perform (op compile-and-run) (reg val))
   (assign env (op get-global-environment))
   (assign continue (label print-result))
   (goto (reg val))
