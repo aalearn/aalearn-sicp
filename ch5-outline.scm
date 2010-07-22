@@ -2275,4 +2275,13 @@ ok
 ;;; EC-Eval value:
 120
 
-; NOT WORKING!
+; see commits:
+; 0d2db7a1cebda9dbc4a5f5b4a60ca530e90ff4e7
+; b18ac509823fa3456def1d3eb19047ab5f35d4bd
+; 0f5ea35d5950e28061149cd1186fce67eb37db8f
+
+
+;;  * _ Exercise 5.49
+; This one becomes trivial with compile-and-run code already implemented
+; see commit: ca8c47486ea8a4b42a054d56c613fccd51edffd7
+
