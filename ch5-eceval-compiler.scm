@@ -67,7 +67,7 @@
          (assemble (statements
                     (compile expression 'val 'return))
                    eceval)))
-    (set-register-contents! eceval 'val instructions)))
+    instructions))
 
 ;; redefining this, with an added one
 (define primitive-procedures
@@ -342,7 +342,7 @@ compile-and-run
   (goto (label eval-dispatch))
 
 compile-and-run-finish
-  (perform (op compile-and-run) (reg val))
+  (assign val (op compile-and-run) (reg val))
   (assign env (op get-global-environment))
   (assign continue (label print-result))
   (goto (reg val))
