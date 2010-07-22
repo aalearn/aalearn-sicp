@@ -191,7 +191,11 @@ read-eval-print-loop
    (op prompt-for-input) (const ";;; EC-Eval input:"))
   (assign exp (op read))
   (assign env (op get-global-environment))
-  (assign continue (label print-result))
+
+;;*function replaced to turn repl into r-compile-epl
+; (assign continue (label print-result))
+  (assign continue (label compile-and-run-finish))
+
   (goto (label eval-dispatch))
 print-result
 ;;**following instruction optional -- if use it, need monitored stack
