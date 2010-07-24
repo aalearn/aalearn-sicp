@@ -2285,3 +2285,67 @@ ok
 ; This one becomes trivial with compile-and-run code already implemented
 ; see commit: ca8c47486ea8a4b42a054d56c613fccd51edffd7
 
+; P.S. This version actually breaks a few things, because it tries to compile
+; expressions that can't really be compiled, like "'(a b)" and "cons"
+; Fixable.
+
+;;  * _ Exercise 5.51
+
+; compiler needs to learn how to compile "let" -- DONE
+; eceval interpreter not comfortable with "cond/let" -- ignored for now, just fixed compiler
+; compiler needs to learn how to compile "error": print something and exit -- DONE
+; some other i/o features: display, newline, etc. -- DONE
+; ca*d*rs needed -- DONE (mostly -- regular expressions might have been nice)
+; set-car!, set-cdr! -- DONE
+; map and length need implementation -- DONE
+
+; what about apply? -- eceval needs to have some mechanism to handle this
+;  multiple ways to handle this, makes sense to make the compiler smart enough to figure it out
+;  not bothering with the interpreter
+;  compiler -- DONE
+
+; okay, working finally, at least for basic programs: 
+
+; start by executing code in ch5-compile-mceval.scm
+
+;; transcript ----------------------------
+
+1 ]=> 
+(total-pushes = 19 maximum-depth = 5)
+;;; EC-Eval value:
+metacircular-evaluator-loaded
+
+;;; EC-Eval input:
+(define the-global-environment (setup-environment))
+
+(total-pushes = 548 maximum-depth = 39)
+;;; EC-Eval value:
+ok
+
+;;; EC-Eval input:
+(driver-loop)
+
+
+;;; M-Eval input:
+(+ 4 28)
+
+;;; M-Eval value:
+32
+
+;;; M-Eval input:
+(define (fact n) (if (= n 1) 1 (* n (fact (- n 1)))))
+
+;;; M-Eval value:
+ok
+
+;;; M-Eval input:
+(fact 9)
+
+;;; M-Eval value:
+362880
+
+;;; M-Eval input:
+
+;;  end transcript -----------------------------------
+
+

@@ -34,6 +34,11 @@
                            target
                            linkage))
         ((cond? exp) (compile (cond->if exp) target linkage))
+
+	; added
+	((let? exp) (compile (let->combination exp) target linkage))
+	((error? exp) (compile (error->combination exp) 'val 'return))
+
         ((application? exp)
          (compile-application exp target linkage))
         (else
@@ -242,20 +247,27 @@
 
 ;;;applying procedures
 
+; modified heavily
 (define (compile-procedure-call target linkage)
-  (let ((primitive-branch (make-label 'primitive-branch))
+  (let ((compile-procedure-call-start (make-label 'compile-procedure-call-start)) ; added for "apply"
+	(explicit-apply-branch (make-label 'explicit-apply-branch))               ; added for "apply" 
+	(primitive-branch (make-label 'primitive-branch))
         (compiled-branch (make-label 'compiled-branch))
 	(interpreted-branch (make-label 'interpreted-branch))
         (after-call (make-label 'after-call)))
     (let ((compiled-linkage
            (if (eq? linkage 'next) after-call linkage)))
       (append-instruction-sequences
-       (make-instruction-sequence '(proc) '()
-        `((test (op primitive-procedure?) (reg proc))
-          (branch (label ,primitive-branch))
-	  (test (op compound-procedure?) (reg proc))
-	  (branch (label ,interpreted-branch))
-	  ))
+       (append-instruction-sequences
+	compile-procedure-call-start
+	(make-instruction-sequence '(proc) '()
+         `((test (op primitive-procedure?) (reg proc))
+           (branch (label ,primitive-branch))
+	   (test (op compound-procedure?) (reg proc))
+	   (branch (label ,interpreted-branch))
+	   (test (op explicit-apply?) (reg proc))
+	   (branch (label ,explicit-apply-branch))
+	   )))
        (parallel-instruction-sequences
 	(append-instruction-sequences
 	 compiled-branch
@@ -264,15 +276,22 @@
 	 (append-instruction-sequences
 	  interpreted-branch
 	  (interpreted-proc-appl target compiled-linkage))
-	 (append-instruction-sequences
-	  primitive-branch
-          (end-with-linkage linkage
-           (make-instruction-sequence '(proc argl)
-                                      (list target)
-            `((assign ,target
-                      (op apply-primitive-procedure)
-                      (reg proc)
-                      (reg argl))))))))
+	 (parallel-instruction-sequences
+	  (append-instruction-sequences                         ; code added to make (apply ...) work
+	   explicit-apply-branch                                ; inefficient, since this must be added
+	   (make-instruction-sequence '(proc argl) '(proc argl) ; for every procedure call!
+            `((assign proc (op explicit-apply-proc) (reg argl))
+	      (assign argl (op explicit-apply-args) (reg argl))
+	      (goto (label ,compile-procedure-call-start)))))
+	  (append-instruction-sequences
+	   primitive-branch
+	   (end-with-linkage linkage
+            (make-instruction-sequence '(proc argl)
+                                        (list target)
+             `((assign ,target
+                       (op apply-primitive-procedure)
+                       (reg proc)
+                       (reg argl)))))))))
        after-call))))
 
 ;;;applying compiled procedures

@@ -87,8 +87,34 @@
 	; additional for compiling
 	(list 'compile-and-run-code compile-and-run-code)
 	(list 'compile-and-run compile-and-run)
+	
+	; additional needed for compiling mceval
+	(list 'number? number?)
+	(list 'string? string?)
+	(list 'symbol? symbol?)
+	(list 'eq? eq?)
+
+	(list 'list list)
+	(list 'pair? pair?)
+	(list 'set-car! set-car!)
+	(list 'set-cdr! set-cdr!)
+
+	(list 'user-print user-print)
+	(list 'read read)
+
         ))
 
+;; redefine this from ch5-syntax, adding boolean option
+(define (self-evaluating? exp)
+  (cond ((number? exp) true)
+        ((string? exp) true)
+	((boolean? exp) true)
+        (else false)))
+
+;; to make "apply" work, need additional operations
+(define (explicit-apply? proc) (eq? proc 'apply))
+(define (explicit-apply-proc argl) (car argl))
+(define (explicit-apply-args argl) (cadr argl))
 
 
 ;;**NB. To [not] monitor stack operations, comment in/[out] the line after
@@ -171,12 +197,18 @@
    (list 'compile-and-run-code compile-and-run-code)
    (list 'compile-and-run compile-and-run)
 
+   ;; for making "apply" work, 5.50 -- implemented above
+   (list 'explicit-apply? explicit-apply?)
+   (list 'explicit-apply-proc explicit-apply-proc)
+   (list 'explicit-apply-args explicit-apply-args)
+
    ))
 
 (define eceval
   (make-machine
    '(exp env val proc argl continue unev
 	 compapp			;*for compiled to call interpreted
+	 debug                          ;*for debugging unfavorable expression
 	 )
    eceval-operations
   '(
@@ -193,8 +225,8 @@ read-eval-print-loop
   (assign env (op get-global-environment))
 
 ;;*function replaced to turn repl into r-compile-epl
-; (assign continue (label print-result))
-  (assign continue (label compile-and-run-finish))
+  (assign continue (label print-result))
+; (assign continue (label compile-and-run-finish))
 
   (goto (label eval-dispatch))
 print-result
@@ -223,6 +255,8 @@ unknown-procedure-type
 
 signal-error
   (perform (op user-print) (reg val))
+  (perform (op user-print) (const " near: "))
+  (perform (op user-print) (reg debug)) ;; added to facilitate debugging
   (goto (label read-eval-print-loop))
 
 ;;SECTION 5.4.1
@@ -268,6 +302,7 @@ ev-lambda
   (goto (reg continue))
 
 ev-application
+  (assign debug (reg exp)) ;; addded to facilitate debugging
   (save continue)
   (save env)
   (assign unev (op operands) (reg exp))
@@ -315,6 +350,10 @@ apply-dispatch
 ;;*next added to call compiled code from evaluator (section 5.5.7)
   (test (op compiled-procedure?) (reg proc))  
   (branch (label compiled-apply))
+;;*next added just to support "apply"
+  (test (op explicit-apply?) (reg proc))  
+  (branch (label explicit-apply))
+
   (goto (label unknown-procedure-type))
 
 ;;*next added to call compiled code from evaluator (section 5.5.7)
@@ -338,6 +377,12 @@ compound-apply
   (assign unev (op procedure-body) (reg proc))
 
   (goto (label ev-sequence))
+
+;; handle (apply...)
+explicit-apply
+  (assign proc (op explicit-apply-proc) (reg argl))
+  (assign argl (op explicit-apply-args) (reg argl))
+  (goto (label apply-dispatch))
 
 ;; compile and run
 compile-and-run

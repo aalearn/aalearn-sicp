@@ -118,3 +118,25 @@
                      (sequence->exp (cond-actions first))
                      (expand-clauses rest))))))
 ;; end of Cond support
+
+;; Need Let compilation to compile mceval
+(define let-assignments cadr)
+(define let-body cddr)
+(define let-assignment-var car)
+(define let-assignment-val cadr)
+ 
+(define (let->combination exp)
+  (cons (make-lambda (map let-assignment-var (let-assignments exp))
+		     (let-body exp))
+	(map let-assignment-val (let-assignments exp))))
+
+(define (let? exp) (tagged-list? exp 'let))
+
+;; Need error compilation to compile mceval
+(define (error? exp) (tagged-list? exp 'error))
+(define (make-user-print item) (list 'user-print item))
+
+(define (error->combination exp)
+  (make-begin
+   (map make-user-print (cons "ERROR: " (append (cdr exp) (list "\n"))))))
+
