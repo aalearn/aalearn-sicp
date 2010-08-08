@@ -378,10 +378,12 @@
                      '<procedure-env>))
       (display object)))
 
-;;;Following are commented out so as not to be evaluated when
+;;;Following were commented out so as not to be evaluated when
 ;;; the file is loaded.
-;;(define the-global-environment (setup-environment))
-;;(driver-loop)
+
+;; but now we do want them to run immediately after compilation
+(define the-global-environment (setup-environment))
+(driver-loop)
 
 'METACIRCULAR-EVALUATOR-LOADED
 ))
