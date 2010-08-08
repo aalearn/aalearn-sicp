@@ -1,0 +1,43 @@
+/* basic screen css for js scheme interpreter */
+html {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #06121D;
+    color: #E8D6C9;
+    font-family: "Andale Mono", Consolas, Courier, fixed;
+    font-size: 95.01%;
+    height: 100%;
+    padding: 0 1em;
+    line-height: 140%;
+}
+
+#content {
+    height: 95%;
+    width: 100%;
+}
+
+.prompt {
+    clear: both;
+    float: left;
+}
+
+.output {
+    clear: both;
+    float: left;
+}
+
+.input {
+    xbackground-color: #0A1824;
+    float: left;
+    width: 95%;
+    outline:none;
+}
+
+.input:focus {
+    background-color: #0D1F2F;
+}
+    
