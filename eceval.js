@@ -1,6 +1,7 @@
 
 $(document).ready(function () {
     announce_html_output("<b>JQuery-Scheme Interpreter</b><br>Interpreter loaded.");
+
     wait_for_input();
 });
 
@@ -52,10 +53,15 @@ function receive_input(element) {
     element.attr('contentEditable', false);
     $('.input .history-selection').removeClass('history-selection');
     var input_expression = parse(tokenize(element.text()));
-    announce_output($.toJSON($.map(input_expression, evaluate)));
+    $.map($.map(input_expression, evaluate), function (o) { announce_output($.toJSON(o)) });
+
+    // announce_output($.toJSON($.map(input_expression, evaluate)));
     wait_for_input();
 }
 
+function qeval(exp) { // quick eval of a string for debugging purposes
+    return evaluate(parse(tokenize(exp))[0]);
+}
 // --- Lexical Analysis, etc. ---
 function tokenize(text) {
     var tokens = [];
@@ -123,8 +129,6 @@ function parse(tokens) {
 		new_nested_exp = [['symbol','quote']];
 		quote_next = false;
 	    }
-	    // TODO: probably need to make these lists similar to lisp arrays 
-	    // otherwise it's not easy to make set-cdr! work as expected
 	    insert_points[insert_points.length-1].push(new_nested_exp);
 	    insert_points.push(new_nested_exp);
 	} else if (token_type == 'close-paren') {
@@ -139,6 +143,10 @@ function parse(tokens) {
 		quote_next = false;
 	    } else {
 		insert_points[insert_points.length-1].push(token);
+		// These lines make parse-tree into scheme-style lists ([A, [B, [] ] ])
+		var list_end = [];
+		insert_points[insert_points.length-1].push(list_end);
+		insert_points[insert_points.length-1] = list_end;
 	    }
 	}
     }
@@ -148,16 +156,24 @@ function parse(tokens) {
 // --- Eval/Apply ---
 // just a sketch for now
 function evaluate(exp) {
-    // if (exp instanceof Array) {
-	
     if (self_evaluating(exp)) {
-	return parseFloat(exp);
-    } else if (exp == '+') {
-	return '+';
-    } else if (exp instanceof Array) {
-	var evaled = $.map(exp, evaluate);
+	return parseFloat(exp[1]);
+    } else if (symbol(exp)) {
+	// check if defined locally
+	if (primitive_operation(exp)) {
+	    return primitive_operation_function(exp);
+	}
+    } else if (exp[0] instanceof Array) {
+	console.log($.toJSON(to_js_style_array(exp)));
+	var evaled = $.map(to_js_style_array(exp), evaluate);
 	var op = evaled[0];
 	var argl = evaled.slice(1);
+	console.log($.toJSON(argl));
+	if (op instanceof Function) {
+	    return op.apply(undefined, argl); 
+	} else {
+	    return "non-primitive op: " + op;
+	}
 	if (op == '+') {
 	    return argl[0] + argl[1];
 	} else {
@@ -167,6 +183,46 @@ function evaluate(exp) {
 }
 
 function self_evaluating(exp) {
-    return (/^[0-9.]*$/).exec(exp);
+    return exp[0] == 'number'; // also handle: || exp[0] == 'string';
+}
+
+function symbol(exp) {
+    return exp[0] == 'symbol';
+}
+
+var primitive_operations = {
+    '+': function(a,b) { return a + b; },
+    '-': function(a,b) { return a - b; },
+    '*': function(a,b) { return a * b; },
+    '/': function(a,b) { return a / b; },
+    '=': function(a,b) { return a == b; },
+    'display': announce_output
+};
+
+function primitive_operation(exp) {
+    return exp[1] in primitive_operations;
+}
+
+function primitive_operation_function(exp) {
+    return primitive_operations[exp[1]];
+}
+
+function cons(a, b) { return [a, b]; }
+function car(a) { return a[0]; }
+function cdr(a) { return a[1]; }
+
+function to_js_style_array(a) { 
+    if (a.length == 0) { 
+	return [] 
+    } else if (a.length == 1) { 
+	console.log("should never happen");
+    } else {
+	var out = [];
+	while (a.length > 0) {
+	    out.push(car(a));
+	    a = cdr(a);
+	}
+    }
+    return out;
 }
 
