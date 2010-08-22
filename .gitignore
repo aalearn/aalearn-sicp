@@ -6,3 +6,9 @@ Release Notes 1.6.pdf
 link_to
 link_to_files/
 
+/dupe/ch5-compiler.scm
+/dupe/ch5-eceval-compiler.scm
+/from-text/ch5-compiler.scm
+/load-eceval-compiler.scm
+/load-eceval.scm
+/.#screen.css

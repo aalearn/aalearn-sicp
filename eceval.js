@@ -17,33 +17,31 @@ function announce_output(out) {
 function wait_for_input() {
     var new_input = $('<div class="input" contenteditable="true" />');
     $('#content').append('<div class="prompt">&raquo;&nbsp;</div>').append(new_input);
-    add_bindings(new_input, receive_input).focus();
 }
 
-function add_bindings(element, input_receiver) {
-    return element.bind('keydown','return', function() {
-	input_receiver($(this));
-	return false; // prevent bubble
-    }).bind('keydown','up', function() {
-	var current_history_selection = $('.history-selection');
-	if (current_history_selection.length) {
-	    current_history_selection.removeClass('history-selection');
-	} else {
-	    current_history_selection = $(this);
+$('.input').live('keydown','return', function() {
+    receive_input($(this));
+    return false; // prevent bubble
+}).live('keydown','up', function() {
+    var current_history_selection = $('.history-selection');
+    if (current_history_selection.length) {
+	current_history_selection.removeClass('history-selection');
+    } else {
+	current_history_selection = $(this);
+    }
+    // TODO: filter out items without text
+    set_new_history($(this), current_history_selection.prevAll('.input').first());
+    return false;
+}).live('keydown','down', function() {
+    var current_history_selection = $('.history-selection');
+    if (current_history_selection.length) {
+	current_history_selection.removeClass('history-selection');
+	var next_item = current_history_selection.nextAll('.input').first();
+	set_new_history($(this), next_item[0] == this ? $(undefined) : next_item);
 	}
-	// TODO: filter out items without text
-	set_new_history($(this), current_history_selection.prevAll('.input').first());
-	return false;
-    }).bind('keydown','down', function() {
-	var current_history_selection = $('.history-selection');
-	if (current_history_selection.length) {
-	    current_history_selection.removeClass('history-selection');
-	    var next_item = current_history_selection.nextAll('.input').first();
-	    set_new_history($(this), next_item[0] == this ? $(undefined) : next_item);
-	}
-	return false;
-    });
-}
+    return false;
+});
+
 
 function set_new_history(target, source) {
     target.text(source.addClass('history-selection').text());
@@ -57,7 +55,7 @@ function receive_input(element) {
     $('.input .history-selection').removeClass('history-selection');
     var input_expression = parse(tokenize(element.text()));
     user_stop = undefined;
-    while (input_expression.length > 0) {
+    while (input_expression && input_expression.length > 0) {
 	announce_output(stringify_scheme_exp(evaluate(car(input_expression))));
 	input_expression = cdr(input_expression);
     }
@@ -73,6 +71,9 @@ function install_page_level_bindings() {
     $(document).bind('keydown','ctrl+c', function() {
 	// currently not-enabled -- needs to set user_stop
 	// eceval also needs to allow this event to run in between iterations
+    });
+    $('#content').bind('click', function() {
+	$('.input').last().focus();
     });
 }
 
@@ -157,7 +158,7 @@ function parse(tokens) {
 	    // ignore
 	} else {
 	    if (quote_next) {
-		insert_points[insert_points.length-1].push(['quote',token]);
+		insert_points[insert_points.length-1].push([['symbol','quote'],[token, []]]);
 		quote_next = false;
 	    } else {
 		insert_points[insert_points.length-1].push(token);
@@ -265,7 +266,7 @@ function eceval(ast) {
     exp = ast;
     var count = 0;
     while (branch !== 'done') {
-	console.log(branch);
+	// console.log(branch);
 	eceval_step();
 	if (count++ > 29) {
 	    branch = 'done';
@@ -281,10 +282,20 @@ function eceval_step() {
    case 'eval-dispatch':
 	console.log(exp);
 	if (self_evaluating(exp)) {
+	    // ev-self-eval
 	    val = self_evaluated(exp);
 	    branch = continue_to;
-	} else if (variable(exp)) {
-	    branch = 'ev-variable';
+	} else if (variable(exp)) { 
+	    // ev-variable
+	    val = lookup_variable_value(symbol_name(exp), env);
+	    if (val == unbound_variable_error) {
+		val = 'unbound symbol: ' + symbol_name(exp);
+		branch = 'signal-error';
+	    }
+	    branch = continue_to;
+	} else if (quoted(exp)) {
+	    val = text_of_quotation(exp);
+	    branch = continue_to;
 	} else if (assignment(exp)) {
 	    branch = 'ev-assignment';
 	} else if (definition(exp)) {
@@ -305,40 +316,6 @@ function eceval_step() {
 
 	break;
 
-    case 'ev-variable':
-	val = lookup_variable_value(symbol_name(exp), env);
-	if (val == unbound_variable_error) {
-	    val = 'unbound symbol: ' + symbol_name(exp);
-	    branch = 'signal-error';
-	}
-	branch = continue_to;
-	break;
-
-// ev-variable
-//   (assign val (op lookup-variable-value) (reg exp) (reg env))
-//   (test (op unbound-variable-error?) (reg val))
-//   (branch (label signal-error))
-//   (goto (reg continue))
-// ev-quoted
-//   (assign val (op text-of-quotation) (reg exp))
-//   (goto (reg continue))
-// ev-lambda
-//   (assign unev (op lambda-parameters) (reg exp))
-//   (assign exp (op lambda-body) (reg exp))
-//   (assign val (op make-procedure)
-//               (reg unev) (reg exp) (reg env))
-//   (goto (reg continue))
-// ev-self-eval
-//   (assign val (reg exp))
-//   (goto (reg continue))
-// ev-variable
-//   (assign val (op lookup-variable-value) (reg exp) (reg env))
-//   (test (op unbound-variable-error?) (reg val))
-//   (branch (label signal-error))
-//   (goto (reg continue))
-// ev-quoted
-//   (assign val (op text-of-quotation) (reg exp))
-//   (goto (reg continue))
 // ev-lambda
 //   (assign unev (op lambda-parameters) (reg exp))
 //   (assign exp (op lambda-body) (reg exp))
@@ -655,6 +632,14 @@ function first_operands(ops) {
 
 function rest_operands(ops) {
     return cdr(ops);
+}
+
+function quoted(exp) {
+    return tagged_list(exp,'quote');
+}
+
+function text_of_quotation(exp) {
+    return cadr(exp)[1];
 }
 
 // ---- misc. functions relating to parsing ----
