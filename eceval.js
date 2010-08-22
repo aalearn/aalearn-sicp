@@ -130,6 +130,10 @@ function parse(tokens) {
 		quote_next = false;
 	    }
 	    insert_points[insert_points.length-1].push(new_nested_exp);
+
+	    var list_end = [];
+	    insert_points[insert_points.length-1].push(list_end);
+	    insert_points[insert_points.length-1] = list_end;
 	    insert_points.push(new_nested_exp);
 	} else if (token_type == 'close-paren') {
 	    insert_points.pop();
@@ -164,7 +168,8 @@ function evaluate(exp) {
 	    return primitive_operation_function(exp);
 	}
     } else if (exp[0] instanceof Array) {
-	console.log($.toJSON(to_js_style_array(exp)));
+	console.log(exp);
+	console.log(stringify(exp));
 	var evaled = $.map(to_js_style_array(exp), evaluate);
 	var op = evaled[0];
 	var argl = evaled.slice(1);
@@ -191,11 +196,11 @@ function symbol(exp) {
 }
 
 var primitive_operations = {
-    '+': function(a,b) { return a + b; },
-    '-': function(a,b) { return a - b; },
-    '*': function(a,b) { return a * b; },
-    '/': function(a,b) { return a / b; },
-    '=': function(a,b) { return a == b; },
+    '+': function(a,b) { return a + b },
+    '-': function(a,b) { return a - b },
+    '*': function(a,b) { return a * b },
+    '/': function(a,b) { return a / b },
+    '=': function(a,b) { return a == b },
     'display': announce_output
 };
 
@@ -226,3 +231,31 @@ function to_js_style_array(a) {
     return out;
 }
 
+// debugging statements (okay to be recursive, not tail-call-optimized)
+function is_scheme_style_list(a) {
+    return ((a instanceof Array) && (a.length == 2) && is_scheme_style_list(a[1]))
+}
+
+function is_token(exp) {
+    return (exp instanceof Array) && !(exp[0] instanceof Array);
+}
+
+function is_nil(exp) {
+    return (exp instanceof Array) && exp[0]==undefined;
+}
+
+function stringify(exp, skip_parens) {
+    if (exp == undefined) {
+	return 'fail';
+    } else if (is_token(exp)) {
+	return is_nil(exp) ? 'nil' : exp[0] + '/' + exp[1];
+    } else {
+	var o = stringify(exp[0]);
+	if (!is_nil(exp[1])) {
+	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify(exp[1], 'skip');
+	}
+	return skip_parens ? o : '(' + o + ')';
+    }
+}
+
+// when we reach the + we want to do it, when we reach the + 1 2
