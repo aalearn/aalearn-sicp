@@ -17,30 +17,33 @@ function announce_output(out) {
 function wait_for_input() {
     var new_input = $('<div class="input" contenteditable="true" />');
     $('#content').append('<div class="prompt">&raquo;&nbsp;</div>').append(new_input);
+    new_input.addBindings();
 }
 
-$('.input').live('keydown','return', function() {
-    receive_input($(this));
-    return false; // prevent bubble
-}).live('keydown','up', function() {
-    var current_history_selection = $('.history-selection');
-    if (current_history_selection.length) {
-	current_history_selection.removeClass('history-selection');
-    } else {
-	current_history_selection = $(this);
-    }
-    // TODO: filter out items without text
-    set_new_history($(this), current_history_selection.prevAll('.input').first());
-    return false;
-}).live('keydown','down', function() {
-    var current_history_selection = $('.history-selection');
-    if (current_history_selection.length) {
-	current_history_selection.removeClass('history-selection');
-	var next_item = current_history_selection.nextAll('.input').first();
-	set_new_history($(this), next_item[0] == this ? $(undefined) : next_item);
+$.fn.addBindings = function() {
+    return $('.input').bind('keydown','return', function() {
+	receive_input($(this));
+	return false; // prevent bubble
+    }).bind('keydown','up', function() {
+	var current_history_selection = $('.history-selection');
+	if (current_history_selection.length) {
+	    current_history_selection.removeClass('history-selection');
+	} else {
+	    current_history_selection = $(this);
 	}
-    return false;
-});
+	// TODO: filter out items without text
+	set_new_history($(this), current_history_selection.prevAll('.input').first());
+	return false;
+    }).bind('keydown','down', function() {
+	var current_history_selection = $('.history-selection');
+	if (current_history_selection.length) {
+	    current_history_selection.removeClass('history-selection');
+	    var next_item = current_history_selection.nextAll('.input').first();
+	    set_new_history($(this), next_item[0] == this ? $(undefined) : next_item);
+	}
+	return false;
+    });
+};
 
 
 function set_new_history(target, source) {
@@ -174,10 +177,14 @@ function parse(tokens) {
 
 // --- Stack ---
 // stored as a javascript array
-var stack = [];
-function save(x) { stack.push(x) }
+var stack = ['STACK'];
+function save(x) { 
+    // console.log('saving ' + $.toJSON(x) + ' to stack');
+    stack.push(x);
+    // console.log('stack is now ' + $.toJSON(stack));
+}
 function restore() { return stack.pop(); }
-function debug_stack() { console.log(stack) }
+function debug_stack() { console.log('Stack:'); console.log(stack) }
 
 // --- Environment ---
 // stored as a javascript array of javascript hashes (objects)
@@ -220,46 +227,17 @@ function set_variable_value(variable, value, env) {
     
 
 // --- Eval/Apply ---
-function evaluate(exp) {
-    return eceval(exp);
-    if (self_evaluating(exp)) {
-	return parseFloat(exp[1]);
-    } else if (symbol(exp)) {
-	// check if defined locally
-	if (primitive_operation(exp)) {
-	    return primitive_operation_function(exp);
-	}
-    } else if (exp[0] instanceof Array) {
-	console.log(exp);
-	console.log(stringify_abstract_syntax_tree(exp));
-
-	var evaled = $.map(to_js_style_array(exp), evaluate);
-	var op = evaled[0];
-	var argl = evaled.slice(1);
-	console.log($.toJSON(argl));
-	if (op instanceof Function) {
-	    return op.apply(undefined, argl); 
-	} else {
-	    return "non-primitive op: " + op;
-	}
-	if (op == '+') {
-	    return argl[0] + argl[1];
-	} else {
-	    return "cannot handle op";
-	}
-    }
-}
-
-
- // only variables stored in 'token' metadata form, rest are in 'simple' form
+// only exp/unev stored in 'token' metadata form, rest are in 'simple' form
 var exp;
 var unev;
 
+var argl;
 var branch;
 var continue_to;
 var val;
+var proc;
 
-function eceval(ast) {
+function evaluate(ast) {
     continue_to = 'done';
     branch = 'eval-dispatch';
     val = undefined;
@@ -277,10 +255,11 @@ function eceval(ast) {
 }
 
 function eceval_step() {
+    // console.log(branch);
     switch(branch) {
- 
-   case 'eval-dispatch':
-	console.log(exp);
+	
+    case 'eval-dispatch':
+	// console.log(exp);
 	if (self_evaluating(exp)) {
 	    // ev-self-eval
 	    val = self_evaluated(exp);
@@ -322,93 +301,94 @@ function eceval_step() {
 //   (assign val (op make-procedure)
 //               (reg unev) (reg exp) (reg env))
 //   (goto (reg continue))
-
+    case 'unknown-procedure-type':
+	val = 'unknown procedure: ' + proc;
+	branch = 'signal-error';
+	break;
 
     case 'ev-application':
 	save(continue_to);
 	unev = operands(exp);
 	exp = operator(exp);
-	
-	
-// ev-application
-//   (save continue)
-//   (assign unev (op operands) (reg exp))
-//   (assign exp (op operator) (reg exp))
-//   (test (op symbol?) (reg exp))
-//   (branch (label ev-operator-symbol))
-//   (save env)
-//   (save unev)
-//   (assign continue (label ev-appl-did-operator))
-//   (goto (label eval-dispatch))
-// ev-operator-symbol
-//   (assign proc (op lookup-variable-value) (reg exp) (reg env))
-//   (test (op unbound-variable-error?) (reg val))
-//   (branch (label signal-error))
-//   (goto (label ev-appl-did-operator-symbol))
+	if (symbol(exp)) {
+	    // ev-operator-symbol
+	    proc = lookup_variable_value(symbol_name(exp), env);
 
-// ev-appl-did-operator
-//   (restore unev)
-//   (restore env)
-//   (assign proc (reg val))
-// ev-appl-did-operator-symbol
-//   (assign argl (op empty-arglist))
-//   (test (op no-operands?) (reg unev))
-//   (branch (label apply-dispatch))
-//   (test (op compound-procedure?) (reg proc))   ; lazy evaluation
-//   (branch (label ev-lazy-appl-operand-loop))   ; "
-//   (save proc)
-// ev-appl-operand-loop
-//   (save argl)
-//   (assign exp (op first-operand) (reg unev))
-//   (test (op last-operand?) (reg unev))
-//   (branch (label ev-appl-last-arg))
-//   (save env)
-//   (save unev)
-//   (assign continue (label ev-appl-accumulate-arg))
-//   (goto (label eval-dispatch))
-// ev-appl-accumulate-arg
-//   (restore unev)
-//   (restore env)
-//   (restore argl)
-//   (assign argl (op adjoin-arg) (reg val) (reg argl))
-//   (assign unev (op rest-operands) (reg unev))
-//   (goto (label ev-appl-operand-loop))
-// ev-appl-last-arg
-//   (assign continue (label ev-appl-accum-last-arg))
-//   (goto (label eval-dispatch))
-// ev-appl-accum-last-arg
-//   (restore argl)
-//   (assign argl (op adjoin-arg) (reg val) (reg argl))
-//   (restore proc)
-//   (goto (label apply-dispatch))
-// apply-dispatch
-//   (test (op primitive-procedure?) (reg proc))
-//   (branch (label primitive-apply))
-//   (test (op compound-procedure?) (reg proc))  
-//   (branch (label compound-apply))
-//   (goto (label unknown-procedure-type))
-
-// ; this section for lazy evaluation
-// ev-lazy-appl-operand-loop
-//   (assign exp (op first-operand) (reg unev))
-//   (test (op last-operand?) (reg unev))
-//   (branch (label ev-lazy-appl-last-arg))
-//   (assign continue (label ev-lazy-appl-accumulate-arg))
-// ev-defer-if-necessary
-//   (test (op self-evaluating?) (reg exp))
-//   (branch (label ev-self-eval))
-//   (assign val (op make-thunk) (reg exp) (reg env))
-//   (goto (reg continue))
-// ev-lazy-appl-last-arg
-//   (assign continue (label ev-lazy-appl-accum-last-arg))
-//   (goto (label ev-defer-if-necessary))
-// ev-lazy-appl-accumulate-arg
-//   (assign argl (op adjoin-arg) (reg val) (reg argl))
-//   (assign unev (op rest-operands) (reg unev))
-//   (goto (label ev-lazy-appl-operand-loop))
-// ev-lazy-appl-accum-last-arg
-//   (assign argl (op adjoin-arg) (reg val) (reg argl))
-//   (goto (label apply-dispatch))
+	    if (proc == unbound_variable_error) {
+		// hacked -- a little different from the text
+		if (primitive_op(exp)) {
+		    proc = primitive_procedure_proc(exp);
+		    branch = 'ev-appl-did-operator-symbol';
+		} else {
+		    branch = 'unknown-procedure-type';
+		}
+	    } else {
+		branch = 'ev-appl-did-operator-symbol';
+	    }
+	} else {
+	    save(env);
+	    save(unev);
+	    continue_to = 'ev-appl-did-operator';
+	    branch = 'eval-dispatch';
+	}
+	break;
+    case 'ev-appl-did-operator':
+	unev = restore();
+	env = restore();
+	proc = val;
+	// no break
+    case 'ev-appl-did-operator-symbol':
+	argl = [];
+	if (no_operands(unev)) {
+	    branch = 'apply-dispatch';
+	} else {
+	    save(proc);
+	    branch = 'ev-appl-operand-loop';
+	}
+	break;
+    case 'ev-appl-operand-loop':
+	save(argl);
+	exp = first_operand(unev);
+	if (last_operand(unev)) {
+	    branch = 'ev-appl-last-arg';
+	} else {
+	    save(env);
+	    save(unev);
+	    continue_to = 'ev-appl-accumulate-arg';
+	    branch = 'eval-dispatch';
+	}
+	break;
+    case 'ev-appl-accumulate-arg':
+	unev = restore();
+	env = restore();
+	argl = restore();
+	argl = adjoin_arg(val, argl);
+	unev = rest_operands(unev);
+	branch = 'ev-appl-operand-loop';
+	break;
+    case 'ev-appl-last-arg':
+	continue_to = 'ev-appl-accum-last-arg';
+	branch = 'eval-dispatch';
+	break;
+    case 'ev-appl-accum-last-arg':
+	argl = restore();
+	argl = adjoin_arg(val, argl);
+	proc = restore();
+	branch = 'apply-dispatch';
+	break;
+    case 'apply-dispatch':
+	if (primitive_procedure(proc)) {
+	    // primitive-apply
+	    val = apply_primitive_procedure(proc, argl);
+	    continue_to = restore();
+	    branch = continue_to;
+	} else if (compound_procedure(proc)) {
+	    branch = 'compound-apply';
+	} else {
+	    branch = 'unknown-procedure-type';
+	}
+	break;
+	
 
 // primitive-apply
 //   (assign val (op apply-primitive-procedure)
@@ -424,7 +404,6 @@ function eceval_step() {
 //               (reg unev) (reg argl) (reg env))
 //   (assign unev (op procedure-body) (reg proc))
 //   (goto (label ev-sequence))
-	break;
 
 // ev-begin
 //   (assign unev (op begin-actions) (reg exp))
@@ -486,36 +465,15 @@ function eceval_step() {
 	branch = continue_to;
 	break;
 	
-
-	
-// ev-assignment
-//   (assign unev (op assignment-variable) (reg exp))
-//   (save unev)
-//   (assign exp (op assignment-value) (reg exp))
-//   (save env)
-//   (save continue)
-//   (assign continue (label ev-assignment-1))
-//   (goto (label eval-dispatch))
-// ev-assignment-1
-//   (restore continue)
-//   (restore env)
-//   (restore unev)
-//   (perform
-//    (op set-variable-value!) (reg unev) (reg val) (reg env))
-//   (assign val (const ok))
-//   (goto (reg continue))
-
     case 'signal-error':
 	val = 'ERROR: ' + val;
 	branch = 'done';
 	break;
     default:
-	console.log('unknown branch: ' + branch);
+	console.log('INTERPRETER ERROR: unknown branch: ' + branch);
+	branch = 'done';
     }
 }
-
-
-
 
 
 
@@ -540,6 +498,12 @@ function eceval_step() {
 
 
 // ---- primitives ----
+function cons(a, b) { return [a, b]; }
+function car(a) { return a[0]; }
+function cdr(a) { return a[1]; }
+function cadr(a) { return car(cdr(a)); }
+function caddr(a) { return cadr(cdr(a)); }
+
 var primitive_operations = {
     '+': function(a,b) { return a + b },
     '-': function(a,b) { return a - b },
@@ -549,20 +513,22 @@ var primitive_operations = {
     'display': announce_output
 };
 
-function primitive_operation(exp) {
+function primitive_op(exp) {
     return exp[1] in primitive_operations;
 }
 
-function primitive_operation_function(exp) {
-    return primitive_operations[exp[1]];
+function primitive_procedure(proc) {
+    return tagged_list(proc, 'primitive');
 }
 
-function cons(a, b) { return [a, b]; }
-function car(a) { return a[0]; }
-function cdr(a) { return a[1]; }
-function cadr(a) { return car(cdr(a)); }
-function caddr(a) { return cadr(cdr(a)); }
+function primitive_procedure_proc(exp) {
+    return [['symbol','primitive'], [ primitive_operations[exp[1]], [] ] ];
+}
 
+function apply_primitive_procedure(proc, argl) {
+    console.log(argl);
+    return cadr(proc).apply(undefined, scheme_to_js_style_array(argl));
+}
 
 // ---- Syntax ----
 function self_evaluating(exp) {
@@ -570,7 +536,8 @@ function self_evaluating(exp) {
 }
 
 function self_evaluated(exp) {
-    return exp[1];
+    console.log(exp);
+    return exp[0] == 'number' ? parseFloat(exp[1]) : exp[1];
 }
 	    
 function symbol(exp) {
@@ -615,7 +582,7 @@ function application(exp) {
 }
 
 function operator(exp) {
-    return symbol_name(car(exp));
+    return car(exp);
 }
 
 function operands(exp) {
@@ -626,12 +593,16 @@ function no_operands(exp) {
     return exp.length == 0;
 }
 
-function first_operands(ops) {
+function first_operand(ops) {
     return car(ops);
 }
 
 function rest_operands(ops) {
     return cdr(ops);
+}
+
+function last_operand(ops) {
+    return cdr(ops).length == 0;
 }
 
 function quoted(exp) {
@@ -642,8 +613,24 @@ function text_of_quotation(exp) {
     return cadr(exp)[1];
 }
 
+// ---- support functions (analogous to eceval-support) ----
+function adjoin_arg(arg, arglist) {
+    if (arglist.length == 0) {
+	return [arg, []];
+    } else {
+	var dupe = arglist.slice(0);
+	dupe[dupe.length - 1] = [arg, []];
+	return dupe;
+    }
+}
+
+// ---- functions analogous to mceval ----
+function compound_procedure(proc) {
+    return tagged_list(proc, 'procedure');
+}
+
 // ---- misc. functions relating to parsing ----
-function to_js_style_array(a) { 
+function ast_to_js_style_array(a) { 
     if (a.length == 0) { 
 	return [] 
     } else if (a.length == 1) { 
@@ -656,6 +643,15 @@ function to_js_style_array(a) {
 	}
     }
     return out;
+}
+
+function scheme_to_js_style_array(a) {
+    var o = [];
+    while (a.length > 0) {
+	o.push(a[0]);
+	a = a[1];
+    }
+    return o;
 }
 
 // debugging statements (okay to be recursive, not tail-call-optimized)
@@ -677,9 +673,9 @@ function stringify_abstract_syntax_tree(exp, skip_parens) {
     } else if (is_token(exp)) {
 	return is_nil_syntax_tree(exp) ? 'nil' : exp[0] + '/' + exp[1];
     } else {
-	var o = stringify(exp[0]);
+	var o = stringify_abstract_syntax_tree(exp[0]);
 	if (!is_nil_syntax_tree(exp[1])) {
-	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify(exp[1], 'skip');
+	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify_abstract_syntax_tree(exp[1], 'skip');
 	}
 	return skip_parens ? o : '(' + o + ')';
     }
