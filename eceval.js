@@ -17,11 +17,12 @@ function announce_output(out) {
 function wait_for_input() {
     var new_input = $('<div class="input" contenteditable="true" />');
     $('#content').append('<div class="prompt">&raquo;&nbsp;</div>').append(new_input);
-    new_input.addBindings();
+    new_input.addBindings().focus();
 }
 
 $.fn.addBindings = function() {
-    return $('.input').bind('keydown','return', function() {
+    return this.bind('keydown','return', function() {
+	$('.input').unbind('keydown'); // disable all others
 	receive_input($(this));
 	return false; // prevent bubble
     }).bind('keydown','up', function() {
@@ -201,9 +202,10 @@ function make_frame(variables, values) {
     return frame;
 }
 
-function extend_environment(variables, values, env) { 
-    env.unshift(make_frame(variables, values));
-    return env;
+function extend_environment(variables, values, env) {
+    return [make_frame(
+	$.map(ast_to_js_style_array(variables), symbol_name), 
+	ast_to_js_style_array(values))].concat(env);
 }
 
 function lookup_variable_value(variable, env) {
@@ -246,7 +248,7 @@ function evaluate(ast) {
     while (branch !== 'done') {
 	// console.log(branch);
 	eceval_step();
-	if (count++ > 29) {
+	if (count++ > 999) {
 	    branch = 'done';
 	    console.log('infinite loop guard');
 	}
@@ -270,8 +272,9 @@ function eceval_step() {
 	    if (val == unbound_variable_error) {
 		val = 'unbound symbol: ' + symbol_name(exp);
 		branch = 'signal-error';
+	    } else {
+		branch = continue_to;
 	    }
-	    branch = continue_to;
 	} else if (quoted(exp)) {
 	    val = text_of_quotation(exp);
 	    branch = continue_to;
@@ -295,15 +298,16 @@ function eceval_step() {
 
 	break;
 
-// ev-lambda
-//   (assign unev (op lambda-parameters) (reg exp))
-//   (assign exp (op lambda-body) (reg exp))
-//   (assign val (op make-procedure)
-//               (reg unev) (reg exp) (reg env))
-//   (goto (reg continue))
     case 'unknown-procedure-type':
 	val = 'unknown procedure: ' + proc;
 	branch = 'signal-error';
+	break;
+
+    case 'ev-lambda':
+	unev = lambda_parameters(exp);
+	exp = lambda_body(exp);
+	val = make_procedure(unev, exp, env);
+	branch = continue_to;
 	break;
 
     case 'ev-application':
@@ -388,44 +392,39 @@ function eceval_step() {
 	    branch = 'unknown-procedure-type';
 	}
 	break;
-	
-
-// primitive-apply
-//   (assign val (op apply-primitive-procedure)
-//               (reg proc)
-//               (reg argl))
-//   (restore continue)
-//   (goto (reg continue))
-
-// compound-apply
-//   (assign unev (op procedure-parameters) (reg proc))
-//   (assign env (op procedure-environment) (reg proc))
-//   (assign env (op extend-environment)
-//               (reg unev) (reg argl) (reg env))
-//   (assign unev (op procedure-body) (reg proc))
-//   (goto (label ev-sequence))
-
-// ev-begin
-//   (assign unev (op begin-actions) (reg exp))
-//   (save continue)
-//   (goto (label ev-sequence))
-
-// ev-sequence
-//   (assign exp (op first-exp) (reg unev))
-//   (test (op last-exp?) (reg unev))
-//   (branch (label ev-sequence-last-exp))
-//   (save unev)
-//   (save env)
-//   (assign continue (label ev-sequence-continue))
-//   (goto (label eval-dispatch))
-// ev-sequence-continue
-//   (restore env)
-//   (restore unev)
-//   (assign unev (op rest-exps) (reg unev))
-//   (goto (label ev-sequence))
-// ev-sequence-last-exp
-//   (restore continue)
-//   (goto (label eval-dispatch))
+    case 'compound-apply':
+	unev = procedure_parameters(proc);
+	env = procedure_environment(proc);
+	env = extend_environment(unev, argl, env);
+	unev = procedure_body(proc);
+	branch = 'ev-sequence';
+	break;
+    case 'ev-begin':
+	unev = begin_actions(exp);
+	save(continue_to);
+	branch = 'ev-sequence';
+	break;
+    case 'ev-sequence':
+	exp = first_exp(unev);
+	if (last_exp(unev)) {
+	    branch = 'ev-sequence-last-exp';
+	} else {
+	    save(unev);
+	    save(env);
+	    continue_to = 'ev-sequence-continue';
+	    branch = 'eval-dispatch';
+	}
+	break;
+    case 'ev-sequence-continue':
+	env = restore();
+	unev = restore();
+	unev = rest_exps(unev);
+	branch = 'ev-sequence';
+	break;
+    case 'ev-sequence-last-exp':
+	continue_to = restore();
+	branch = 'eval-dispatch';
+	break;
 
 // ev-if
 //   (save exp)
@@ -503,6 +502,10 @@ function car(a) { return a[0]; }
 function cdr(a) { return a[1]; }
 function cadr(a) { return car(cdr(a)); }
 function caddr(a) { return cadr(cdr(a)); }
+function cadddr(a) { return caddr(cdr(a)); }
+function cddr(a) { return cdr(cdr(a)); }
+
+function last(a) { return cdr(a).length == 0 }
 
 var primitive_operations = {
     '+': function(a,b) { return a + b },
@@ -526,7 +529,6 @@ function primitive_procedure_proc(exp) {
 }
 
 function apply_primitive_procedure(proc, argl) {
-    console.log(argl);
     return cadr(proc).apply(undefined, scheme_to_js_style_array(argl));
 }
 
@@ -536,7 +538,6 @@ function self_evaluating(exp) {
 }
 
 function self_evaluated(exp) {
-    console.log(exp);
     return exp[0] == 'number' ? parseFloat(exp[1]) : exp[1];
 }
 	    
@@ -575,35 +576,30 @@ function assignment_value(exp) {
 function definition(exp) { return tagged_list(exp, 'define'); }
 function if_exp(exp) { return tagged_list(exp, 'if'); }
 function lambda(exp) { return tagged_list(exp, 'lambda'); }
-function begin(exp) { return tagged_list(exp, 'lambda'); }
+var lambda_parameters = cadr;
+var lambda_body = cddr;
 
-function application(exp) {
-    return pair(exp);
+function make_procedure(parameters, body, env) {
+    // todo: consider simplifying this internal representation 
+    return [['symbol','procedure'], [parameters, [body, [env, []]]]];
 }
+var procedure_parameters = cadr;
+var procedure_body = caddr;
+var procedure_environment = cadddr;
 
-function operator(exp) {
-    return car(exp);
-}
+function begin(exp) { return tagged_list(exp, 'begin'); }
+var begin_actions = cdr;
+var first_exp = car;
+var rest_exps = cdr;
+var last_exp = last;
 
-function operands(exp) {
-    return cdr(exp);
-}
-
-function no_operands(exp) {
-    return exp.length == 0;
-}
-
-function first_operand(ops) {
-    return car(ops);
-}
-
-function rest_operands(ops) {
-    return cdr(ops);
-}
-
-function last_operand(ops) {
-    return cdr(ops).length == 0;
-}
+function application(exp) { return pair(exp); }
+var operator = car;
+var operands = cdr;
+function no_operands(exp) { return exp.length == 0; }
+var first_operand = car;
+var rest_operands = cdr;
+var last_operand = last;
 
 function quoted(exp) {
     return tagged_list(exp,'quote');
