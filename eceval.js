@@ -257,7 +257,7 @@ function evaluate(ast) {
 }
 
 function eceval_step() {
-    // console.log(branch);
+    console.log(branch);
     switch(branch) {
 	
     case 'eval-dispatch':
@@ -425,26 +425,25 @@ function eceval_step() {
 	continue_to = restore();
 	branch = 'eval-dispatch';
 	break;
-
-// ev-if
-//   (save exp)
-//   (save env)
-//   (save continue)
-//   (assign continue (label ev-if-decide))
-//   (assign exp (op if-predicate) (reg exp))
-//   (goto (label eval-dispatch))
-// ev-if-decide
-//   (restore continue)
-//   (restore env)
-//   (restore exp)
-//   (test (op true?) (reg val))
-//   (branch (label ev-if-consequent))
-// ev-if-alternative
-//   (assign exp (op if-alternative) (reg exp))
-//   (goto (label eval-dispatch))
-// ev-if-consequent
-//   (assign exp (op if-consequent) (reg exp))
-//   (goto (label eval-dispatch))
+    case 'ev-if':
+	save(exp);
+	save(env);
+	save(continue_to);
+	continue_to = 'ev-if-decide';
+	exp = if_predicate(exp);
+	branch = 'eval-dispatch';
+	break;
+    case 'ev-if-decide':
+	continue_to = restore();
+	env = restore();
+	exp = restore();
+	if (evaluates_to_true(val)) {
+	    exp = if_consequent(exp);
+	} else {
+	    exp = if_alternative(exp);
+	}
+	branch = 'eval-dispatch';
+	break;
 
     case 'ev-assignment':
 	unev = assignment_variable(exp);
@@ -574,7 +573,6 @@ function assignment_value(exp) {
 }
 
 function definition(exp) { return tagged_list(exp, 'define'); }
-function if_exp(exp) { return tagged_list(exp, 'if'); }
 function lambda(exp) { return tagged_list(exp, 'lambda'); }
 var lambda_parameters = cadr;
 var lambda_body = cddr;
@@ -600,6 +598,12 @@ function no_operands(exp) { return exp.length == 0; }
 var first_operand = car;
 var rest_operands = cdr;
 var last_operand = last;
+
+function if_exp(exp) { return tagged_list(exp, 'if'); }
+var if_predicate = cadr;
+var if_consequent = caddr;
+var if_alternative = cadddr;
+function evaluates_to_true(x) { return x ? true : false }; // placeholder, in case we need to change this
 
 function quoted(exp) {
     return tagged_list(exp,'quote');
