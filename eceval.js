@@ -226,6 +226,11 @@ function set_variable_value(variable, value, env) {
     }
     env[0][variable] = value;
 }
+
+function define_variable(variable, value, env) {
+    // simplifying for now!
+    set_variable_value(variable, value, env);
+}
     
 
 // --- Eval/Apply ---
@@ -257,7 +262,7 @@ function evaluate(ast) {
 }
 
 function eceval_step() {
-    console.log(branch);
+    // console.log(branch);
     switch(branch) {
 	
     case 'eval-dispatch':
@@ -462,7 +467,25 @@ function eceval_step() {
 	val = 'ok';
 	branch = continue_to;
 	break;
-	
+
+    case 'ev-definition':
+	unev = definition_variable(exp);
+	save(unev);
+	exp = definition_value(exp);
+	save(env);
+	save(continue_to);
+	continue_to = 'ev-definition-1';
+	branch = 'eval-dispatch';
+	break;
+    case 'ev-definition-1':
+	continue_to = restore();
+	env = restore();
+	unev = restore();
+	define_variable(symbol_name(unev), val, env);
+	val = 'ok: ' +  symbol_name(unev);
+	branch = continue_to;
+	break;
+
     case 'signal-error':
 	val = 'ERROR: ' + val;
 	branch = 'done';
@@ -475,24 +498,6 @@ function eceval_step() {
 
 
 
-// ev-definition
-//   (assign unev (op definition-variable) (reg exp))
-//   (save unev)
-//   (assign exp (op definition-value) (reg exp))
-//   (save env)
-//   (save continue)
-//   (assign continue (label ev-definition-1))
-//   (goto (label eval-dispatch))
-// ev-definition-1
-//   (restore continue)
-//   (restore env)
-//   (restore unev)
-//   (perform
-//    (op define-variable!) (reg unev) (reg val) (reg env))
-//   (assign val (const ok))
-//   (goto (reg continue))
-//    )))
-
 
 
 // ---- primitives ----
@@ -500,9 +505,12 @@ function cons(a, b) { return [a, b]; }
 function car(a) { return a[0]; }
 function cdr(a) { return a[1]; }
 function cadr(a) { return car(cdr(a)); }
-function caddr(a) { return cadr(cdr(a)); }
-function cadddr(a) { return caddr(cdr(a)); }
+function cdar(a) { return cdr(car(a)); }
 function cddr(a) { return cdr(cdr(a)); }
+function caadr(a) { return car(cadr(a)); }
+function caddr(a) { return cadr(cdr(a)); }
+function cdadr(a) { return cdr(cadr(a)); }
+function cadddr(a) { return caddr(cdr(a)); }
 
 function last(a) { return cdr(a).length == 0 }
 
@@ -572,7 +580,20 @@ function assignment_value(exp) {
     return caddr(exp);
 }
 
+function make_lambda(params, body) {
+    return [['symbol','lambda'], [ params, body ]];
+};
+    
 function definition(exp) { return tagged_list(exp, 'define'); }
+var definition_variable = caadr;
+function definition_value(exp) {
+    if (symbol(exp)) {
+	return caddr(exp);
+    } else {
+	return make_lambda(cdadr(exp), cddr(exp));
+    }
+}
+
 function lambda(exp) { return tagged_list(exp, 'lambda'); }
 var lambda_parameters = cadr;
 var lambda_body = cddr;
