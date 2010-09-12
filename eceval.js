@@ -2,9 +2,7 @@
 // stored as a javascript array
 var stack = ['STACK'];
 function save(x) { 
-    // console.log('saving ' + $.toJSON(x) + ' to stack');
     stack.push(x);
-    // console.log('stack is now ' + $.toJSON(stack));
 }
 function restore() { return stack.pop(); }
 function debug_stack() { console.log('Stack:'); console.log(stack) }
@@ -39,6 +37,7 @@ function lookup_variable_value(variable, env) {
     return unbound_variable_error;
 }
 
+// different from text: okay to set something previously undefined
 function set_variable_value(variable, value, env) {
     for (i = 0, len = env.length; i < len; i++) {
 	if (env[i].hasOwnProperty(variable)) {
@@ -50,7 +49,6 @@ function set_variable_value(variable, value, env) {
 }
 
 function define_variable(variable, value, env) {
-    // simplifying for now!
     set_variable_value(variable, value, env);
 }
     

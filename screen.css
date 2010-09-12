@@ -20,6 +20,41 @@ body {
     width: 100%;
 }
 
+#repl {
+    float: left;
+    height: 80%;
+    width: 50%;
+}
+
+#buffer-frame {
+    float: left;
+    width: 50%;
+    height: 80%;
+}
+
+#buffer-inner-frame {
+    overflow-y: auto;
+}
+#buffer-frame #buffer-intro {
+    color: #4D5F6F;
+}
+#buffer-frame #line-numbers, #buffer-frame #buffer {
+    float: left;
+}
+
+#buffer-frame #line-numbers {
+    float: left;
+    color: #4D5F6F;
+    width: 5%;
+    text-align: right;
+    margin-right: 1%;
+}
+
+#buffer-frame #buffer {
+    height: 100%;
+    width: 94%;
+}
+
 .prompt {
     clear: both;
     float: left;
