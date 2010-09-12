@@ -1,7 +1,7 @@
 $(document).ready(function () {
     install_page_level_bindings();
     announce_html_output("<b>JQuery-Scheme Interpreter</b><br>Interpreter loaded.");
-    wait_for_input();
+    wait_for_input(true);
 });
 
 function announce_html_output(out) {
@@ -12,16 +12,19 @@ function announce_output(out) {
     $('#repl').append($('<div class="output" />').text(out));
 }
 
-function wait_for_input() {
+function wait_for_input(focus_on_repl) {
     var new_input = $('<div class="input" contenteditable="true" />');
     $('#repl').append('<div class="prompt">&raquo;&nbsp;</div>').append(new_input);
-    new_input.addBindings().focus();
+    new_input.addBindings()
+    if (focus_on_repl) {
+	new_input.focus();
+    }
 }
 
 $.fn.addBindings = function() {
     return this.bind('keydown','return', function() {
 	$('.input').unbind('keydown'); // disable all others
-	receive_input($(this));
+	receive_input($(this).text(), true);
 	return false; // prevent bubble
     }).bind('keydown','up', function() {
 	var current_history_selection = $('.history-selection');
@@ -52,16 +55,16 @@ function set_new_history(target, source) {
 
 var user_stop = undefined;
 
-function receive_input(element) {
+function receive_input(input, from_repl) {
     $('.input').last().attr('contentEditable', false);
     $('.input .history-selection').removeClass('history-selection');
-    var input_expression = parse(tokenize(element.text()));
+    var input_expression = parse(tokenize(input, from_repl));
     user_stop = undefined;
     while (input_expression && input_expression.length > 0) {
 	announce_output(stringify_scheme_exp(evaluate(car(input_expression))));
 	input_expression = cdr(input_expression);
     }
-    wait_for_input();
+    wait_for_input(from_repl);
 }
 
 function qeval(exp) { // quick eval of a string for debugging purposes
@@ -85,7 +88,7 @@ $(document).ready(function () {
     $('#buffer').bind('keyup', function() { fix_line_numbering() });
 
     $('#content').bind('keydown', 'ctrl+r', function() {
-	receive_input($('#buffer'));
+	receive_input($('#buffer').html());
     });
 });
 
@@ -101,8 +104,10 @@ function fix_line_numbering(len) {
     if (!len) {
 	// contenteditable appears to insert divs if there's content,
 	// and insert brs for whitespace only lines
-	len = $('#buffer > br').length + $('#buffer > div').length;
-
+	len = $('#buffer br').length;
+	$('#buffer div').each(function(i, e) {
+	    if (!$(e).find('br').length) len++
+	});
     }
     var line_numbering = '';
     for (i = 1; i <= len; i++) {

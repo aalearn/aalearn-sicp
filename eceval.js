@@ -95,7 +95,7 @@ function eceval_step() {
 	    // ev-variable
 	    val = lookup_variable_value(symbol_name(exp), env);
 	    if (val == unbound_variable_error) {
-		val = 'unbound symbol: ' + symbol_name(exp);
+		val = 'unbound symbol: ' + symbol_name(exp) + ', ' + code_source(exp);
 		branch = 'signal-error';
 	    } else {
 		branch = continue_to;
@@ -124,7 +124,7 @@ function eceval_step() {
 	break;
 
     case 'unknown-procedure-type':
-	val = 'unknown procedure: ' + proc;
+	val = 'unknown procedure: ' + proc + ': ' + symbol_name(exp) + ', ' + code_source(exp);
 	branch = 'signal-error';
 	break;
 
@@ -370,6 +370,11 @@ function symbol(exp) {
 
 function symbol_name(exp) {
     return exp[1];
+}
+
+function code_source(exp) {
+    console.log(exp);
+    return exp[2] == 'repl' ? 'from repl' : ('line ' + exp[2]);
 }
 
 function variable(exp) {

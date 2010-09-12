@@ -1,10 +1,48 @@
 // --- Lexical Analysis, etc. ---
-function tokenize(text) {
+function tokenize(html, from_repl) {
     var tokens = [];
     var last_token = null;
     var in_text_literal = false;
-    for (i = 0, len = text.length; i < len; i++) {
-	var c = text[i];
+
+    var line_number = 1;
+    var count_next_br = true; // maybe chrome-specific?
+    var line_level_comment = false;
+
+    for (i = 0, len = html.length; i < len; i++) {
+	var c;
+	if (from_repl) {
+	    c = html[i];
+	} else {
+	    if (html.substr(i,4) == '<br>') {
+		// first "br" within div doesn't count
+		if (count_next_br) {
+		    line_number++;
+		    line_level_comment = false;
+		} else {
+		    count_next_br = true;
+		}
+		i += 3;
+
+		continue;
+	    } else if (html.substr(i, 5) == '<div>') {
+		count_next_br = false;
+		i += 4;
+		continue;
+	    } else if (html.substr(i, 6) == '</div>') {
+		count_next_br = true;
+		line_number++;
+		line_level_comment = false;
+		i += 5;
+		continue;
+
+	    } else if (html.substr(i, 6) == '&nbsp;') {
+		c = ' ';
+		i += 5;
+	    } else {
+		c = html[i];
+	    }
+	}
+
 	if (in_text_literal) {
 	    if (last_token[0] == 'escape') {
 		if (c == 'n') {
@@ -20,11 +58,15 @@ function tokenize(text) {
 	} else if (c == '"') {
 	    in_text_literal = true;
 	    tokens.push(['text_literal', '']);
+	} else if (line_level_comment) {
+	    continue;
+	} else if (c == ';') {
+	    line_level_comment = true;
 	} else if (/[a-zA-Z_<>\+\/\-\=\*\/\!\?\-]/.exec(c)) {
 	    if (last_token && last_token[0] == 'symbol') {
 		last_token[1] += c;
 	    } else {
-		tokens.push(['symbol', c]);
+		tokens.push(['symbol', c, from_repl ? 'repl' : line_number]);
 	    }
 	} else if (/[0-9.]/.exec(c)) {
 	    // TODO: handle negative numbers!
@@ -44,7 +86,7 @@ function tokenize(text) {
 	} else if (c == '\'') {
 	    tokens.push(['quote',c]);
 	} else {
-	    tokens.push(['error','error']);
+	    tokens.push(['error','unparseable']);
 	}
 	last_token = tokens[tokens.length-1];
     }
