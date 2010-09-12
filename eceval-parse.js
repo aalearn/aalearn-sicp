@@ -1,0 +1,160 @@
+// --- Lexical Analysis, etc. ---
+function tokenize(text) {
+    var tokens = [];
+    var last_token = null;
+    var in_text_literal = false;
+    for (i = 0, len = text.length; i < len; i++) {
+	var c = text[i];
+	if (in_text_literal) {
+	    if (last_token[0] == 'escape') {
+		if (c == 'n') {
+		    last_token[1] += "\n";
+		} else {
+		    last_token[1] += c;
+		}
+	    } else if (c == '"') {
+		in_text_literal = false;
+	    } else {
+		last_token[1] += c;
+	    }
+	} else if (c == '"') {
+	    in_text_literal = true;
+	    tokens.push(['text_literal', '']);
+	} else if (/[a-zA-Z_<>\+\/\-\=\*\/\!\?\-]/.exec(c)) {
+	    if (last_token && last_token[0] == 'symbol') {
+		last_token[1] += c;
+	    } else {
+		tokens.push(['symbol', c]);
+	    }
+	} else if (/[0-9.]/.exec(c)) {
+	    // TODO: handle negative numbers!
+	    if (last_token && (last_token[0] == 'symbol' || last_token[0] == 'number')) {
+		last_token[1] += c;
+	    } else {
+		tokens.push(['number', c]);
+	    }
+	} else if (/\s/.exec(c)) {
+	    tokens.push(['whitespace', c]);
+	} else if (c == '(') {
+	    tokens.push(['open-paren', c]);
+	} else if (c == ')') {
+	    tokens.push(['close-paren', c]);
+	} else if (c == '\\') {
+	    tokens.push(['escape', c]);
+	} else if (c == '\'') {
+	    tokens.push(['quote',c]);
+	} else {
+	    tokens.push(['error','error']);
+	}
+	last_token = tokens[tokens.length-1];
+    }
+    return tokens;
+}
+
+function parse(tokens) {
+    var exp = [];
+    var insert_points = [exp];
+    var quote_next = false;
+    // todo: block/detect invalid parsings, e.g. quote then close-paren
+    for (i = 0, len = tokens.length; i < len; i++) {
+	token = tokens[i];
+	token_type = token[0];
+	if (token_type == 'open-paren') {
+	    var new_nested_exp = [];
+	    if (quote_next) {
+		new_nested_exp = [['symbol','quote']];
+		quote_next = false;
+	    }
+	    insert_points[insert_points.length-1].push(new_nested_exp);
+
+	    var list_end = [];
+	    insert_points[insert_points.length-1].push(list_end);
+	    insert_points[insert_points.length-1] = list_end;
+	    insert_points.push(new_nested_exp);
+	} else if (token_type == 'close-paren') {
+	    insert_points.pop();
+	} else if (token_type == 'quote') {
+	    quote_next = true;
+	} else if (token_type == 'whitespace') {
+	    // ignore
+	} else {
+	    if (quote_next) {
+		insert_points[insert_points.length-1].push([['symbol','quote'],[token, []]]);
+		quote_next = false;
+	    } else {
+		insert_points[insert_points.length-1].push(token);
+		// These lines make parse-tree into scheme-style lists ([A, [B, [] ] ])
+		var list_end = [];
+		insert_points[insert_points.length-1].push(list_end);
+		insert_points[insert_points.length-1] = list_end;
+	    }
+	}
+    }
+    return exp;
+}
+
+// ---- misc. functions relating to parsing ----
+function ast_to_js_style_array(a) { 
+    if (a.length == 0) { 
+	return [] 
+    } else if (a.length == 1) { 
+	console.log("should never happen");
+    } else {
+	var out = [];
+	while (a.length > 0) {
+	    out.push(car(a));
+	    a = cdr(a);
+	}
+    }
+    return out;
+}
+
+function scheme_to_js_style_array(a) {
+    var o = [];
+    while (a.length > 0) {
+	o.push(a[0]);
+	a = a[1];
+    }
+    return o;
+}
+
+// debugging statements (okay to be recursive, not tail-call-optimized)
+function is_scheme_style_list(a) {
+    return ((a instanceof Array) && (a.length == 2) && is_scheme_style_list(a[1]))
+}
+
+function is_token(exp) {
+    return (exp instanceof Array) && !(exp[0] instanceof Array);
+}
+
+function is_nil_syntax_tree(exp) {
+    return (exp instanceof Array) && exp[0]==undefined;
+}
+
+function stringify_abstract_syntax_tree(exp, skip_parens) {
+    if (exp == undefined) {
+	return 'fail';
+    } else if (is_token(exp)) {
+	return is_nil_syntax_tree(exp) ? 'nil' : exp[0] + '/' + exp[1];
+    } else {
+	var o = stringify_abstract_syntax_tree(exp[0]);
+	if (!is_nil_syntax_tree(exp[1])) {
+	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify_abstract_syntax_tree(exp[1], 'skip');
+	}
+	return skip_parens ? o : '(' + o + ')';
+    }
+}
+
+function stringify_scheme_exp(exp, skip_parens) {
+    if (exp == undefined) {
+	return 'nil';
+    } else if (!(exp instanceof Array)) {
+	return exp;
+    } else {
+	var o = stringify_scheme_exp(exp[0]);
+	if (exp[1] !== undefined) {
+	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify_scheme_exp(exp[1], 'skip_parens');
+	}
+	return skip_parens ? o : '(' + o + ')';
+    }
+}
