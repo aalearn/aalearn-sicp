@@ -84,7 +84,7 @@ function tokenize(html, from_repl) {
 	} else if (c == '\\') {
 	    tokens.push(['escape', c]);
 	} else if (c == '\'') {
-	    tokens.push(['quote',c]);
+	    tokens.push(['quote',c, from_repl ? 'repl' : line_number]);
 	} else {
 	    tokens.push(['error','unparseable']);
 	}
@@ -102,17 +102,22 @@ function parse(tokens) {
 	token = tokens[i];
 	token_type = token[0];
 	if (token_type == 'open-paren') {
+	    // if quoted, should turn '(x y) into [quote [x, [y, []]]]
 	    var new_nested_exp = [];
 	    if (quote_next) {
-		new_nested_exp = [['symbol','quote']];
 		quote_next = false;
-	    }
-	    insert_points[insert_points.length-1].push(new_nested_exp);
+		new_nested_exp = [['symbol','quote', 'n/a'], []];
+		insert_points[insert_points.length-1].push(new_nested_exp);
+		insert_points.push(new_nested_exp[1]);
+		
+	    } else {
+		insert_points[insert_points.length-1].push(new_nested_exp);
 
-	    var list_end = [];
-	    insert_points[insert_points.length-1].push(list_end);
-	    insert_points[insert_points.length-1] = list_end;
-	    insert_points.push(new_nested_exp);
+		var list_end = [];
+		insert_points[insert_points.length-1].push(list_end);
+		insert_points[insert_points.length-1] = list_end;
+		insert_points.push(new_nested_exp);
+	    }
 	} else if (token_type == 'close-paren') {
 	    insert_points.pop();
 	} else if (token_type == 'quote') {
@@ -125,11 +130,11 @@ function parse(tokens) {
 		quote_next = false;
 	    } else {
 		insert_points[insert_points.length-1].push(token);
-		// These lines make parse-tree into scheme-style lists ([A, [B, [] ] ])
-		var list_end = [];
-		insert_points[insert_points.length-1].push(list_end);
-		insert_points[insert_points.length-1] = list_end;
 	    }
+	    // These lines make parse-tree into scheme-style lists ([A, [B, [] ] ])
+	    var list_end = [];
+	    insert_points[insert_points.length-1].push(list_end);
+	    insert_points[insert_points.length-1] = list_end;
 	}
     }
     return exp;

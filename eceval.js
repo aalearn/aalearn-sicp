@@ -86,10 +86,12 @@ function eceval_step() {
     switch(branch) {
 	
     case 'eval-dispatch':
-	// console.log(exp);
 	if (self_evaluating(exp)) {
 	    // ev-self-eval
 	    val = self_evaluated(exp);
+	    branch = continue_to;
+	} else if (quoted(exp)) {
+	    val = text_of_quotation(exp);
 	    branch = continue_to;
 	} else if (variable(exp)) { 
 	    // ev-variable
@@ -100,9 +102,6 @@ function eceval_step() {
 	    } else {
 		branch = continue_to;
 	    }
-	} else if (quoted(exp)) {
-	    val = text_of_quotation(exp);
-	    branch = continue_to;
 	} else if (assignment(exp)) {
 	    branch = 'ev-assignment';
 	} else if (definition(exp)) {
@@ -331,11 +330,15 @@ function cadddr(a) { return caddr(cdr(a)); }
 function last(a) { return cdr(a).length == 0 }
 
 var primitive_operations = {
-    '+': function(a,b) { return a + b },
-    '-': function(a,b) { return a - b },
-    '*': function(a,b) { return a * b },
-    '/': function(a,b) { return a / b },
-    '=': function(a,b) { return a == b },
+    '+': function(a) { return car(a) + cadr(a) },
+    '-': function(a) { return car(a) - cadr(a) },
+    '*': function(a) { return car(a) * cadr(a) },
+    '/': function(a) { return car(a) / cadr(a) },
+    '=': function(a) { return car(a) == cadr(a) },
+    'car': car,
+    'cdr': cdr,
+    'cadr': cadr,
+    'cdar': cdar,
     'display': announce_output
 };
 
@@ -352,16 +355,22 @@ function primitive_procedure_proc(exp) {
 }
 
 function apply_primitive_procedure(proc, argl) {
-    return cadr(proc).apply(undefined, scheme_to_js_style_array(argl));
+    return cadr(proc).apply(undefined, [argl]);
 }
 
 // ---- Syntax ----
 function self_evaluating(exp) {
-    return exp[0] == 'number'; // also handle: || exp[0] == 'string';
+    return exp[0] == 'number' || exp[1] == 'true' || exp[1] == 'false'; // also handle: || exp[0] == 'string';
 }
 
 function self_evaluated(exp) {
-    return exp[0] == 'number' ? parseFloat(exp[1]) : exp[1];
+    if (exp[0] == 'number') {
+	return parseFloat(exp[1]);
+    } else if (exp[1] == 'false') {
+	return false;
+    } else if (exp[2] == 'true') {
+	return true;
+    }
 }
 	    
 function symbol(exp) {
@@ -373,8 +382,13 @@ function symbol_name(exp) {
 }
 
 function code_source(exp) {
-    console.log(exp);
-    return exp[2] == 'repl' ? 'from repl' : ('line ' + exp[2]);
+    if (exp[2] == 'repl' || exp) {
+	return 'from repl';
+    } else if (exp[2] == 'n/a') {
+	return 'n/a';
+    } else {
+	return 'line ' + exp[2];
+    }
 }
 
 function variable(exp) {
@@ -445,10 +459,12 @@ function if_exp(exp) { return tagged_list(exp, 'if'); }
 var if_predicate = cadr;
 var if_consequent = caddr;
 var if_alternative = cadddr;
-function evaluates_to_true(x) { return x ? true : false }; // placeholder, in case we need to change this
+
+// placeholder, in case we need to change this
+function evaluates_to_true(x) { return x ? true : false }; 
 
 function quoted(exp) {
-    return tagged_list(exp,'quote');
+    return exp[0][1] == 'quote';
 }
 
 function text_of_quotation(exp) {
