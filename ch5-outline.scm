@@ -2349,3 +2349,90 @@ ok
 ;;  end transcript -----------------------------------
 
 
+
+
+;; More 5.51 dabbling
+; gut check math
+(+ 2 3)
+(+ (* 4 5) (* 3 2))
+
+(car '(1 2))
+
+
+; Solve a kenken
+(define (cadr-assoc x a) 
+  (if (assoc x a)
+      (cadr (assoc x a))
+      false))
+
+(define (dbg x)
+  (display x)
+  (newline)
+  x)
+
+(define (solve-kenken size pattern)
+  (define (valid-row? j board)
+    (define (iter n numbers-seen)
+      (if (> n size)
+	  true
+	  (let ((filled-number (cadr-assoc (list n j) board)))
+	    (if filled-number
+		(if (memq filled-number numbers-seen)
+		    false
+		    (iter (+ n 1) (cons filled-number numbers-seen)))
+		(iter (+ n 1) numbers-seen)))))
+    (iter 1 '()))
+
+  (define (valid-col? i board)
+    (define (iter n numbers-seen)
+      (if (> n size)
+	  true
+	  (let ((filled-number (cadr-assoc (list i n) board)))
+	    (if filled-number
+		(if (memq filled-number numbers-seen)
+		    false
+		    (iter (+ n 1) (cons filled-number numbers-seen)))))))
+    (iter 1 '()))
+
+  (define (all? op board)
+    (define (iter n)
+      (if (> n size)
+	  true
+	  (and (op n board)
+	       (iter (+ n 1)))))
+    (iter 1))
+
+  (define (valid? board)
+    (and (all? valid-row? board)
+	 (all? valid-col? board)))
+
+  (define (x)
+    (and (all? valid-row? board)
+	 (all? valid-col? board)))
+
+  (define (try-values-for-cell i j so-far)
+    (define (iter n)
+      (let ((new-board (cons (list (list i j) n) so-far))
+	    (done (= i j 1))
+	    (next-j (if (= i 1) (- j 1) j))
+	    (next-i (if (= i 1) size (- i 1))))
+	(if (> n size)
+	    '()
+	    (if (valid? new-board)
+		(if done
+		    new-board
+		    (cons (try-values-for-cell next-i next-j new-board) (iter (+ n 1))))
+		(iter (+ n 1))))))
+    (iter 1))
+  (try-values-for-cell size size '()))
+
+
+(solve-kenken 4 
+'((7 + (1 1) (1 2))
+(2 - (2 1) (2 2))
+(2 / (3 1) (4 1))
+(24 * (3 2) (4 2) (4 3))
+(2 / (1 3) (1 4))
+(5 + (2 3) (3 3))
+(2 = (2 4))
+(1 - (3 4) (4 4))))
