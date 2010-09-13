@@ -40,7 +40,47 @@
   (newline)
   x)
 
-(define (solve-kenken size pattern)
+(define (any? a)
+  (if (null? a)
+      false
+      (if (car a)
+	  true
+	  (any? (cdr a)))))
+
+(define (all? a)
+  (if (null? a)
+      true
+      (if (car a)
+	  (all? (cdr a))
+	  false)))
+
+
+; remove false items
+(define (compact a)
+  (if (null? a)
+      '()
+      (if (car a)
+	  (cons (car a) (compact (cdr a)))
+	  (compact (cdr a)))))
+
+(define (insertions e list)
+  (if (null? list)
+      (cons (cons e list) list)
+      (cons (cons e list)
+            (map (lambda (tail) (cons (car list) tail))
+                 (insertions e (cdr list))))))
+ 
+(define (permutations list)
+  (if (null? list)
+      (cons list list)
+      (apply append (map (lambda (permutation)
+                           (insertions (car list) permutation))
+                         (permutations (cdr list))))))
+ 
+(define (any-permutation-equals? result op args)
+  (any? (map (lambda (x) (= result (apply op x))) (permutations args))))
+
+(define (solve-kenken size constraints)
   (define (valid-row? j board)
     (define (iter n numbers-seen)
       (if (> n size)
@@ -64,7 +104,27 @@
 		    (iter (+ n 1) (cons filled-number numbers-seen)))))))
     (iter 1 '()))
 
-  (define (all? op board)
+  (define (check-math result op args)
+    (cond ((eq? op '+) (= result (apply + args)))
+	  ((eq? op '*) (= result (apply * args)))
+	  ((eq? op '/) (any-permutation-equals? result / args))
+	  ((eq? op '-) (any-permutation-equals? result - args))))
+
+  (define (fits-constraints? board rem-constraints)
+    (if (null? rem-constraints)
+	true
+	(let ((constraint (car rem-constraints)))
+	  (let ((result (car constraint))
+		(op (cadr constraint))
+		(cells (caddr constraint)))
+	    (let ((cell-values (map (lambda (x) (cadr-assoc x board)) cells)))
+	      (and 
+	       (if (all? cell-values)
+		   (check-math result op cell-values)
+		   true)
+	       (fits-constraints? board (cdr rem-constraints))))))))
+
+  (define (all-iter? op board)
     (define (iter n)
       (if (> n size)
 	  true
@@ -73,8 +133,9 @@
     (iter 1))
 
   (define (valid? board)
-    (and (all? valid-row? board)
-	 (all? valid-col? board)))
+    (and (all-iter? valid-row? board)
+	 (all-iter? valid-col? board)
+	 (fits-constraints? board constraints)))
 
   (define (x)
     (and (all? valid-row? board)
@@ -98,14 +159,14 @@
 
 
 (solve-kenken 4 
-'((7 + (1 1) (1 2))
-(2 - (2 1) (2 2))
-(2 / (3 1) (4 1))
-(24 * (3 2) (4 2) (4 3))
-(2 / (1 3) (1 4))
-(5 + (2 3) (3 3))
-(2 = (2 4))
-(1 - (3 4) (4 4))))
+'((7 + ((1 1) (1 2)))
+(2 - ((2 1) (2 2)))
+(2 / ((3 1) (4 1)))
+(24 * ((3 2) (4 2) (4 3)))
+(2 / ((1 3) (1 4)))
+(5 + ((2 3) (3 3)))
+(2 = ((2 4)))
+(1 - ((3 4) (4 4)))))
 
 	  
 	</div>
