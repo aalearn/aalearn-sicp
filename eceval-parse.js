@@ -38,6 +38,12 @@ function tokenize(html, from_repl) {
 	} else if (html.substr(i, 6) == '&nbsp;') {
 	    c = ' ';
 	    i += 5;
+	} else if (html.substr(i, 4) == '&gt;') {
+	    c = '>';
+	    i += 3;
+	} else if (html.substr(i, 4) == '&lt;') {
+	    c = '<';
+	    i += 3;
 	} else {
 	    c = html[i];
 	}

@@ -122,11 +122,10 @@ function eceval_step() {
 	    val = 'unknown expression type: ' + stringify_abstract_syntax_tree(exp);
 	    branch = 'signal-error';
 	}
-
 	break;
 
     case 'unknown-procedure-type':
-	val = 'unknown procedure: ' + proc + ': ' + symbol_name(exp) + ', ' + code_source(exp);
+	val = 'unknown procedure: ' + proc + ' ' + code_source(exp);
 	branch = 'signal-error';
 	break;
 
@@ -150,6 +149,9 @@ function eceval_step() {
 		if (primitive_op(exp)) {
 		    proc = primitive_procedure_proc(exp);
 		    branch = 'ev-appl-did-operator-symbol';
+		} else if (symbol_name(exp) == "error") {
+		    proc = [['symbol','error'], []];
+		    branch = 'ev-appl-did-operator-symbol'; // hacked in
 		} else {
 		    branch = 'unknown-procedure-type';
 		}
@@ -208,7 +210,10 @@ function eceval_step() {
 	branch = 'apply-dispatch';
 	break;
     case 'apply-dispatch':
-	if (primitive_procedure(proc)) {
+	if (error_procedure(proc)) {
+	    val = argl.join(' ');
+	    branch = 'signal-error';
+	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
 	    val = apply_primitive_procedure(proc, argl);
 	    continue_to = restore();
@@ -338,6 +343,10 @@ var primitive_operations = {
     '*': function(a) { return car(a) * cadr(a) },
     '/': function(a) { return car(a) / cadr(a) },
     '=': function(a) { return car(a) == cadr(a) },
+    '>': function(a) { return car(a) > cadr(a) },
+    '<': function(a) { return car(a) < cadr(a) },
+    '>=': function(a) { return car(a) >= cadr(a) },
+    '<=': function(a) { return car(a) <= cadr(a) },
     'cons': function(a) { return cons(car(a), cadr(a)); },
     'car': car,
     'cdr': cdr,
@@ -348,6 +357,11 @@ var primitive_operations = {
 
 function primitive_op(exp) {
     return exp[1] in primitive_operations;
+}
+
+function error_procedure(proc) {
+    console.log($.toJSON(proc));
+    return tagged_list(proc, 'error')
 }
 
 function primitive_procedure(proc) {
