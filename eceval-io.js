@@ -24,7 +24,7 @@ function wait_for_input(focus_on_repl) {
 $.fn.addBindings = function() {
     return this.bind('keydown','return', function() {
 	$('.input').unbind('keydown'); // disable all others
-	receive_input($(this).text(), true);
+	receive_input($(this).html(), true);
 	return false; // prevent bubble
     }).bind('keydown','up', function() {
 	var current_history_selection = $('.history-selection');

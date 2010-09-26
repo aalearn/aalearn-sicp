@@ -10,37 +10,36 @@ function tokenize(html, from_repl) {
 
     for (i = 0, len = html.length; i < len; i++) {
 	var c;
-	if (from_repl) {
-	    c = html[i];
-	} else {
-	    if (html.substr(i,4) == '<br>') {
-		// first "br" within div doesn't count
-		if (count_next_br) {
-		    line_number++;
-		    line_level_comment = false;
-		} else {
-		    count_next_br = true;
-		}
-		i += 3;
-
-		continue;
-	    } else if (html.substr(i, 5) == '<div>') {
-		count_next_br = false;
-		i += 4;
-		continue;
-	    } else if (html.substr(i, 6) == '</div>') {
-		count_next_br = true;
+	if (html.substr(i,22) == '<meta charset="utf-8">') {
+	    i += 21;
+	    continue;
+	} else if (html.substr(i,4) == '<br>') {
+	    // first "br" within div doesn't count
+	    if (count_next_br) {
 		line_number++;
 		line_level_comment = false;
-		i += 5;
-		continue;
-
-	    } else if (html.substr(i, 6) == '&nbsp;') {
-		c = ' ';
-		i += 5;
 	    } else {
-		c = html[i];
+		count_next_br = true;
 	    }
+	    i += 3;
+
+	    continue;
+	} else if (html.substr(i, 5) == '<div>') {
+	    count_next_br = false;
+	    i += 4;
+	    continue;
+	} else if (html.substr(i, 6) == '</div>') {
+	    count_next_br = true;
+	    line_number++;
+	    line_level_comment = false;
+	    i += 5;
+	    continue;
+
+	} else if (html.substr(i, 6) == '&nbsp;') {
+	    c = ' ';
+	    i += 5;
+	} else {
+	    c = html[i];
 	}
 
 	if (in_text_literal) {
