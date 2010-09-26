@@ -32,6 +32,19 @@
 (car '(1 2))
 
 
+; debugging example
+(define (answer in1 in2)
+  (hundredfold (+ (half (inc in1)) (inc-thrice in2))))
+(define (hundredfold x) (* x 100))
+(define (half x) (* x 2)) ; oops!
+(define (inc x) (+ x 1))
+(define (inc-thrice x) (+ x 3))
+
+(answer 1 2) ; => 900
+
+; with some error trapping	  
+(define (hundredfold x) (if (> x 8) (error "bad x value") (* x 100)))
+	  
 ; Solve a kenken
 (define (cadr-assoc x a) 
   (if (assoc x a)

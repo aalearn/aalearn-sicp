@@ -360,7 +360,6 @@ function primitive_op(exp) {
 }
 
 function error_procedure(proc) {
-    console.log($.toJSON(proc));
     return tagged_list(proc, 'error')
 }
 

@@ -2531,17 +2531,17 @@ a
 (a 1 2)
 
 ;; Improvement 2: tree of sources for data
-(f 9) 
-   \-> (+ 4 5)
-          | \-> (j 2) 
-           \--> (g 2)
-	           \-> (* 2 2)
-                          | \-> constant in g 
-                           \--> (h 1)        
+;; (f 9) 
+;;    \-> (+ 4 5)
+;;           | \-> (j 2) 
+;;            \--> (g 2)
+;; 	           \-> (* 2 2)
+;;                           | \-> constant in g 
+;;                            \--> (h 1)        
 
-(a 1 2)
-   | \-> repl
-    \--> repl
+;; (a 1 2)
+;;    | \-> repl
+;;     \--> repl
 
 ;; So we record the full tree of how each value came to be what it was, and allow
 ;; progressive drilldown into the tree.
@@ -2553,5 +2553,5 @@ a
 ;; note: I expanded out the args, but the fn should also have a provenance-tree
 ;; note: should be tricky for complicated data structures!
 
-
-
+;; where do we record all of this? in each procedure environment?
+;;  ARGH!
