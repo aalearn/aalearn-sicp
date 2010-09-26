@@ -64,12 +64,15 @@ var continue_to;
 var val;
 var proc;
 
+var run_tree;
+
 function evaluate(ast) {
     continue_to = 'done';
     branch = 'eval-dispatch';
     val = undefined;
     exp = ast;
     var count = 0;
+    run_tree = [];
     while (branch !== 'done') {
 	// console.log(branch);
 	eceval_step();
@@ -335,6 +338,7 @@ var primitive_operations = {
     '*': function(a) { return car(a) * cadr(a) },
     '/': function(a) { return car(a) / cadr(a) },
     '=': function(a) { return car(a) == cadr(a) },
+    'cons': function(a) { return cons(car(a), cadr(a)); },
     'car': car,
     'cdr': cdr,
     'cadr': cadr,
@@ -468,7 +472,17 @@ function quoted(exp) {
 }
 
 function text_of_quotation(exp) {
-    return cadr(exp)[1];
+    return text_of_item(cadr(exp));
+}
+
+function text_of_item(exp) {
+    if (exp instanceof Array && !exp.length) {
+	return undefined;
+    } else if (is_token(exp)) {
+	return exp[1];
+    } else {
+	return [text_of_item(car(exp)), text_of_item(cdr(exp))];
+    }
 }
 
 // ---- support functions (analogous to eceval-support) ----

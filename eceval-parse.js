@@ -102,15 +102,17 @@ function parse(tokens) {
 	token = tokens[i];
 	token_type = token[0];
 	if (token_type == 'open-paren') {
-	    // if quoted, should turn '(x y) into [quote [x, [y, []]]]
-	    var new_nested_exp = [];
 	    if (quote_next) {
+		// if quoted, should turn '(x y) into [quote [x, [y, []]]]
 		quote_next = false;
-		new_nested_exp = [['symbol','quote', 'n/a'], []];
+		var list_end = [];
+		var new_nested_exp = [['symbol','quote', 'n/a'], [list_end, []]];
 		insert_points[insert_points.length-1].push(new_nested_exp);
-		insert_points.push(new_nested_exp[1]);
+		insert_points.push(list_end);
 		
 	    } else {
+		// cryptic! :(
+		var new_nested_exp = [];
 		insert_points[insert_points.length-1].push(new_nested_exp);
 
 		var list_end = [];
@@ -171,7 +173,8 @@ function is_scheme_style_list(a) {
 }
 
 function is_token(exp) {
-    return (exp instanceof Array) && !(exp[0] instanceof Array);
+    return (exp instanceof Array) && 
+	(exp[0] == 'number' || exp[0] == 'string');
 }
 
 function is_nil_syntax_tree(exp) {
@@ -200,7 +203,7 @@ function stringify_scheme_exp(exp, skip_parens) {
     } else {
 	var o = stringify_scheme_exp(exp[0]);
 	if (exp[1] !== undefined) {
-	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify_scheme_exp(exp[1], 'skip_parens');
+ 	    o += (!(exp[1] instanceof Array) ? ' . ' : ' ') + stringify_scheme_exp(exp[1], 'skip_parens');
 	}
 	return skip_parens ? o : '(' + o + ')';
     }
