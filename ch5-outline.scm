@@ -2497,3 +2497,61 @@ ok
 (5 + ((2 3) (3 3)))
 (2 = ((2 4)))
 (1 - ((3 4) (4 4)))))
+
+;; --- The Debugger ---
+;; So the kenken solution itself isn't that complicated, since it's not so different from the
+;; 8-queens problem from the text. 
+;; Somewhat more interesting: a better debugger with which to improve this thing.
+;; Basically, help with one common class of problems by throwing an absolutely huge amount 
+;; of memory at the problem, similar to the kind of record-keeping done when profiling code.
+
+;; Sample code to illustrate the kind of error we're trying to catch
+(define (a in1 in2)
+  (f (+ g(h(in1)) j(in2))))
+(define (f x) (* x 100))
+(define (g x) (* x 2)) ; oops, should have been  / x 2 !
+(define (h x) (+ x 1))
+(define (j x) (+ x 3))
+
+(a 1 2) ; => 900
+
+;; Let's say that we know that the desired output value should never be over 800
+(define (f x) (if (> x 8) (error "bad x value") (* x 100))) ; correct!
+
+;; Furthermore the input values in1 and in2 are definitely valid
+;; So now we know that the error is somewhere in that code, but how do we find it?
+
+;; The stacktrace might say the following:
+error: bad x value
+f
+a
+
+;; Improvement 1: display passed values in stack trace
+(f 9)
+(a 1 2)
+
+;; Improvement 2: tree of sources for data
+(f 9) 
+   \-> (+ 4 5)
+          | \-> (j 2) 
+           \--> (g 2)
+	           \-> (* 2 2)
+                          | \-> constant in g 
+                           \--> (h 1)        
+
+(a 1 2)
+   | \-> repl
+    \--> repl
+
+;; So we record the full tree of how each value came to be what it was, and allow
+;; progressive drilldown into the tree.
+
+;; Hm. Some kind of binary splitting would be best, especially if you have a bunch of functions
+;;  which is essentially pass through the data or do so selectively.  You don't want to have to step
+;;  through all of these functions which are obviously doing the right thing!
+
+;; note: I expanded out the args, but the fn should also have a provenance-tree
+;; note: should be tricky for complicated data structures!
+
+
+
