@@ -378,15 +378,18 @@ function apply_primitive_procedure(proc, argl) {
 
 // ---- Syntax ----
 function self_evaluating(exp) {
-    return exp[0] == 'number' || exp[1] == 'true' || exp[1] == 'false'; // also handle: || exp[0] == 'string';
+    return exp[0] == 'number' || exp[0] == 'text-literal' 
+	|| exp[1] == 'true' || exp[1] == 'false';
 }
 
 function self_evaluated(exp) {
     if (exp[0] == 'number') {
 	return parseFloat(exp[1]);
+    } else if (exp[0] == 'text-literal') {
+	return exp[1];
     } else if (exp[1] == 'false') {
 	return false;
-    } else if (exp[2] == 'true') {
+    } else if (exp[1] == 'true') {
 	return true;
     }
 }
@@ -465,7 +468,7 @@ var first_exp = car;
 var rest_exps = cdr;
 var last_exp = last;
 
-function application(exp) { return pair(exp); }
+function application(exp) { return pair(exp) && !is_token(exp); }
 var operator = car;
 var operands = cdr;
 function no_operands(exp) { return exp.length == 0; }

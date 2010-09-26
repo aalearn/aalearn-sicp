@@ -62,7 +62,7 @@ function tokenize(html, from_repl) {
 	    }
 	} else if (c == '"') {
 	    in_text_literal = true;
-	    tokens.push(['text_literal', '']);
+	    tokens.push(['text-literal', '']);
 	} else if (line_level_comment) {
 	    continue;
 	} else if (c == ';') {
@@ -179,22 +179,27 @@ function is_scheme_style_list(a) {
 
 function is_token(exp) {
     return (exp instanceof Array) && 
-	(exp[0] == 'number' || exp[0] == 'string');
+	(exp[0] == 'number' || exp[0] == 'text-literal');
 }
 
 function is_nil_syntax_tree(exp) {
     return (exp instanceof Array) && exp[0]==undefined;
 }
 
-function stringify_abstract_syntax_tree(exp, skip_parens) {
-    if (exp == undefined) {
+function stringify_abstract_syntax_tree(exp, skip_parens, count) {
+    if (count < 2) console.log($.toJSON(exp));
+    if (!count) count = 0;
+    if (count > 20) {
+	console.log('suppressing deeply nested data');
+	return "...";
+    } else if (exp == undefined) {
 	return 'fail';
     } else if (is_token(exp)) {
 	return is_nil_syntax_tree(exp) ? 'nil' : exp[0] + '/' + exp[1];
     } else {
-	var o = stringify_abstract_syntax_tree(exp[0]);
+	var o = stringify_abstract_syntax_tree(exp[0], false, count + 1);
 	if (!is_nil_syntax_tree(exp[1])) {
-	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify_abstract_syntax_tree(exp[1], 'skip');
+	    o += (is_token(exp[1]) ? ' . ' : ' ') + stringify_abstract_syntax_tree(exp[1], 'skip', count + 1);
 	}
 	return skip_parens ? o : '(' + o + ')';
     }
