@@ -346,6 +346,8 @@ function cadddr(a) { return caddr(cdr(a)); }
 
 function last(a) { return cdr(a).length == 0 }
 
+function list(a) { return a.length == 0 ? [] : cons(car(a), list(cdr(a))); }
+
 var primitive_operations = {
     '+': function(a) { return car(a) + cadr(a) },
     '-': function(a) { return car(a) - cadr(a) },
@@ -361,6 +363,7 @@ var primitive_operations = {
     'cdr': function(a) { return cdr(car(a)) },
     'cadr': function(a) { return cadr(car(a)) },
     'cdar': function(a) { return cdar(car(a)) },
+    'list': list,
     'display': announce_output
 };
 
