@@ -53,6 +53,7 @@ body {
 #buffer-frame #buffer {
     height: 100%;
     width: 94%;
+    white-space: nowrap;
 }
 
 .prompt {
