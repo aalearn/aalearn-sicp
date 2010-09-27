@@ -2516,32 +2516,32 @@ ok
 (answer 1 2) ; => 900
 
 ;; Let's say that we know that the desired output value should never be over 800
-(define (f x) (if (> x 8) (error "bad x value") (* x 100))) ; correct!
+(define (hundredfold x) (if (> x 8) (error "bad x value") (* x 100))) ; correct!
 
 ;; Furthermore the input values in1 and in2 are definitely valid
 ;; So now we know that the error is somewhere in that code, but how do we find it?
 
 ;; The stacktrace might say the following:
 error: bad x value
-f
-a
+hundredfold
+answer
 
 ;; Improvement 1: display passed values in stack trace
-(f 9)
-(a 1 2)
+(hundredfold 9)
+(answer 1 2)
 
 ;; Improvement 2: tree of sources for data
-;; (f 9) 
-;;    \-> (+ 4 5)
-;;           | \-> (j 2) 
-;;            \--> (g 2)
-;; 	           \-> (* 2 2)
-;;                           | \-> constant in g 
-;;                            \--> (h 1)        
+;; (hundredfold 9) 
+;;               \-> (+ 4 5)
+;;                      | \-> (inc-thrice 2) 
+;;                       \--> (half 2)
+;; 	                            \-> (* 2 2)
+;;                                         | \-> constant in g 
+;;                                         \--> (h 1)        
 
-;; (a 1 2)
-;;    | \-> repl
-;;     \--> repl
+;; (answer 1 2)
+;;         | \-> repl
+;;          \--> repl
 
 ;; So we record the full tree of how each value came to be what it was, and allow
 ;; progressive drilldown into the tree.
@@ -2557,3 +2557,7 @@ a
 ;;  deep-copy everything is okay
 ;;  vals need to be a data structure. e.g. [ regular-val, provenance tree ]
 ;;  when we apply, the provenance tree gets mutated some
+
+
+
+
