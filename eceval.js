@@ -67,6 +67,7 @@ var proc;
 var run_tree;
 
 function evaluate(ast) {
+    // console.log($.toJSON(ast));
     continue_to = 'done';
     branch = 'eval-dispatch';
     val = undefined;
@@ -122,10 +123,11 @@ function eceval_step() {
 	    val = 'unknown expression type: ' + stringify_abstract_syntax_tree(exp);
 	    branch = 'signal-error';
 	}
+	// console.log('-->' + branch);
 	break;
 
     case 'unknown-procedure-type':
-	val = 'unknown procedure: ' + proc + ' ' + code_source(exp);
+	val = 'unknown procedure "' + exp[1] + '" ' + code_source(exp);
 	branch = 'signal-error';
 	break;
 
@@ -138,6 +140,7 @@ function eceval_step() {
 
     case 'ev-application':
 	save(continue_to);
+	var original_expression = exp; // hack for macro_expand!
 	unev = operands(exp);
 	exp = operator(exp);
 	if (symbol(exp)) {
@@ -145,8 +148,14 @@ function eceval_step() {
 	    proc = lookup_variable_value(symbol_name(exp), env);
 
 	    if (proc == unbound_variable_error) {
+		if (macro(exp)) {
+		    exp = macro_expand(original_expression);
+		    console.log("let finished");
+		    console.log(exp);
+		    branch = 'eval-dispatch'; // try again, with mutated exp
+		}
 		// hacked -- a little different from the text
-		if (primitive_op(exp)) {
+		else if (primitive_op(exp)) {
 		    proc = primitive_procedure_proc(exp);
 		    branch = 'ev-appl-did-operator-symbol';
 		} else if (symbol_name(exp) == "error") {
@@ -348,10 +357,10 @@ var primitive_operations = {
     '>=': function(a) { return car(a) >= cadr(a) },
     '<=': function(a) { return car(a) <= cadr(a) },
     'cons': function(a) { return cons(car(a), cadr(a)); },
-    'car': car,
-    'cdr': cdr,
-    'cadr': cadr,
-    'cdar': cdar,
+    'car': function(a) { return car(car(a)) },
+    'cdr': function(a) { return cdr(car(a)) },
+    'cadr': function(a) { return cadr(car(a)) },
+    'cdar': function(a) { return cdar(car(a)) },
     'display': announce_output
 };
 
@@ -373,6 +382,39 @@ function primitive_procedure_proc(exp) {
 
 function apply_primitive_procedure(proc, argl) {
     return cadr(proc).apply(undefined, [argl]);
+}
+
+// ---- Macros ----
+function macro(exp) {
+    return symbol_name(exp) == 'let' || symbol_name(exp) == 'cond';
+}
+
+function macro_expand(exp) {
+    console.log($.toJSON(exp));
+    if (symbol_name(car(exp)) == "let") {
+	return let_to_lambda(exp);
+    } else if (symbol_name(exp) == "cond") {
+	console.log("error: cond is not implemented");
+    } else {
+	console.log("error: unable to expand macro!");
+    }
+}
+function let_assignments(a) { return cadr(a) };
+function let_body(a) { return cddr(a) }; // is car right?
+function scheme_map(f, a) {
+    if (car(a)) {
+	return [f(car(a)), scheme_map(f, cdr(a))];
+    } else {
+	return [];
+    }
+}
+function let_to_lambda(a) {
+    console.log('let to lambda');
+    console.log($.toJSON(a));
+    return [[['symbol','lambda',exp[2]],
+	     [ scheme_map(car, let_assignments(a)),
+	       let_body(a) ]],
+	    car(scheme_map(cdr, let_assignments(a)))];
 }
 
 // ---- Syntax ----
@@ -402,12 +444,12 @@ function symbol_name(exp) {
 }
 
 function code_source(exp) {
-    if (exp[2] == 'repl' || exp) {
+    if (exp[2] == 'repl' || !exp) {
 	return 'from repl';
     } else if (exp[2] == 'n/a') {
 	return 'n/a';
     } else {
-	return 'line ' + exp[2];
+	return ' on line ' + exp[2];
     }
 }
 
@@ -488,13 +530,13 @@ function quoted(exp) {
 }
 
 function text_of_quotation(exp) {
-    return text_of_item(cadr(exp));
+    return text_of_item(cdr(exp));
 }
 
 function text_of_item(exp) {
     if (exp instanceof Array && !exp.length) {
 	return undefined;
-    } else if (is_token(exp)) {
+    } else if (is_token(exp) || symbol(exp)) {
 	return exp[1];
     } else {
 	return [text_of_item(car(exp)), text_of_item(cdr(exp))];

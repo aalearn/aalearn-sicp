@@ -47,7 +47,7 @@ function tokenize(html, from_repl) {
 	} else {
 	    c = html[i];
 	}
-
+	var source = from_repl ? 'repl' : line_number;
 	if (in_text_literal) {
 	    if (last_token[0] == 'escape') {
 		if (c == 'n') {
@@ -62,7 +62,7 @@ function tokenize(html, from_repl) {
 	    }
 	} else if (c == '"') {
 	    in_text_literal = true;
-	    tokens.push(['text-literal', '']);
+	    tokens.push(['text-literal', '', source]);
 	} else if (line_level_comment) {
 	    continue;
 	} else if (c == ';') {
@@ -78,18 +78,18 @@ function tokenize(html, from_repl) {
 	    if (last_token && (last_token[0] == 'symbol' || last_token[0] == 'number')) {
 		last_token[1] += c;
 	    } else {
-		tokens.push(['number', c]);
+		tokens.push(['number', c, source]);
 	    }
 	} else if (/\s/.exec(c)) {
-	    tokens.push(['whitespace', c]);
+	    tokens.push(['whitespace', c, source]);
 	} else if (c == '(') {
-	    tokens.push(['open-paren', c]);
+	    tokens.push(['open-paren', c, source]);
 	} else if (c == ')') {
-	    tokens.push(['close-paren', c]);
+	    tokens.push(['close-paren', c, source]);
 	} else if (c == '\\') {
-	    tokens.push(['escape', c]);
+	    tokens.push(['escape', c, source]);
 	} else if (c == '\'') {
-	    tokens.push(['quote',c, from_repl ? 'repl' : line_number]);
+	    tokens.push(['quote', c, source]);
 	} else {
 	    tokens.push(['error','unparseable']);
 	}
@@ -111,8 +111,8 @@ function parse(tokens) {
 		// if quoted, should turn '(x y) into [quote [x, [y, []]]]
 		quote_next = false;
 		var list_end = [];
-		var new_nested_exp = [['symbol','quote', 'n/a'], [list_end, []]];
-		insert_points[insert_points.length-1].push(new_nested_exp);
+		var new_nested_exp = [['symbol','quote', token[2]], list_end];
+		insert_points[insert_points.length-1].push(new_nested_exp, []);
 		insert_points.push(list_end);
 		
 	    } else {

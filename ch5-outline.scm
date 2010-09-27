@@ -2506,14 +2506,14 @@ ok
 ;; of memory at the problem, similar to the kind of record-keeping done when profiling code.
 
 ;; Sample code to illustrate the kind of error we're trying to catch
-(define (a in1 in2)
-  (f (+ g(h(in1)) j(in2))))
-(define (f x) (* x 100))
-(define (g x) (* x 2)) ; oops, should have been  / x 2 !
-(define (h x) (+ x 1))
-(define (j x) (+ x 3))
+(define (answer in1 in2)
+  (hundredfold (+ (half (inc in1)) (inc-thrice in2))))
+(define (hundredfold x) (* x 100))
+(define (half x) (* x 2)) ; oops!
+(define (inc x) (+ x 1))
+(define (inc-thrice x) (+ x 3))
 
-(a 1 2) ; => 900
+(answer 1 2) ; => 900
 
 ;; Let's say that we know that the desired output value should never be over 800
 (define (f x) (if (> x 8) (error "bad x value") (* x 100))) ; correct!
@@ -2553,5 +2553,7 @@ a
 ;; note: I expanded out the args, but the fn should also have a provenance-tree
 ;; note: should be tricky for complicated data structures!
 
-;; where do we record all of this? in each procedure environment?
-;;  ARGH!
+;; Some simplifying tricks:
+;;  deep-copy everything is okay
+;;  vals need to be a data structure. e.g. [ regular-val, provenance tree ]
+;;  when we apply, the provenance tree gets mutated some
