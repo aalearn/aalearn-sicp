@@ -87,7 +87,7 @@ $(document).ready(function () {
     fix_buffer_display();
     $('#buffer').bind('keyup', function() { fix_line_numbering() });
 
-    $('#content').bind('keydown', 'alt+r', function() {
+    $('body').bind('keydown', 'alt+r', function() {
 	receive_input($('#buffer').html());
 	return false;
     });

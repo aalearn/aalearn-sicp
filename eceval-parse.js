@@ -110,11 +110,12 @@ function parse(tokens) {
 	    if (quote_next) {
 		// if quoted, should turn '(x y) into [quote [x, [y, []]]]
 		quote_next = false;
+		var quote_list_end = [];
 		var list_end = [];
-		var new_nested_exp = [['symbol','quote', token[2]], list_end];
-		insert_points[insert_points.length-1].push(new_nested_exp, []);
-		insert_points.push(list_end);
-		
+		insert_points[insert_points.length-1].push([['symbol','quote', token[2]], quote_list_end]);
+		insert_points[insert_points.length-1].push(list_end);
+		insert_points[insert_points.length-1] = list_end;
+		insert_points.push(quote_list_end);
 	    } else {
 		// cryptic! :(
 		var new_nested_exp = [];

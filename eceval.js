@@ -64,7 +64,8 @@ var continue_to;
 var val;
 var proc;
 
-var run_tree;
+var run_tree, call_stack;
+var start_exp, prev_exp;
 
 function evaluate(ast) {
     // console.log($.toJSON(ast));
@@ -74,8 +75,11 @@ function evaluate(ast) {
     exp = ast;
     var count = 0;
     run_tree = [];
+    start_exp = undefined;
+    prev_exp = undefined;
     while (branch !== 'done') {
-	// console.log(branch);
+	prev_exp = start_exp;
+	start_exp = exp;
 	eceval_step();
 	if (count++ > 999) {
 	    branch = 'done';
@@ -87,10 +91,14 @@ function evaluate(ast) {
 
 function eceval_step() {
     // console.log(branch);
+    // console.log(exp);
     switch(branch) {
 	
     case 'eval-dispatch':
-	if (self_evaluating(exp)) {
+	if (typeof(exp) == 'undefined') {
+	    val = 'interpreter produced invalid expression after ' + $.toJSON(prev_exp) + ' ' + code_source(prev_exp);
+	    branch = 'signal-error';
+	} else if (self_evaluating(exp)) {
 	    // ev-self-eval
 	    val = self_evaluated(exp);
 	    branch = continue_to;
@@ -150,8 +158,6 @@ function eceval_step() {
 	    if (proc == unbound_variable_error) {
 		if (macro(exp)) {
 		    exp = macro_expand(original_expression);
-		    console.log("let finished");
-		    console.log(exp);
 		    branch = 'eval-dispatch'; // try again, with mutated exp
 		}
 		// hacked -- a little different from the text
@@ -393,7 +399,6 @@ function macro(exp) {
 }
 
 function macro_expand(exp) {
-    console.log($.toJSON(exp));
     if (symbol_name(car(exp)) == "let") {
 	return let_to_lambda(exp);
     } else if (symbol_name(exp) == "cond") {
@@ -412,8 +417,6 @@ function scheme_map(f, a) {
     }
 }
 function let_to_lambda(a) {
-    console.log('let to lambda');
-    console.log($.toJSON(a));
     return [[['symbol','lambda',exp[2]],
 	     [ scheme_map(car, let_assignments(a)),
 	       let_body(a) ]],
