@@ -2498,6 +2498,15 @@ ok
 (2 = ((2 4)))
 (1 - ((3 4) (4 4)))))
 
+;; some needed functions
+"--needed scheme functions--"
+(define (assoc x a)
+  (if (car a)
+      (if (equal? x (caar a))
+	  (car a)
+	  (assoc x (cdr a)))
+      false))	  
+
 ;; --- The Debugger ---
 ;; So the kenken solution itself isn't that complicated, since it's not so different from the
 ;; 8-queens problem from the text. 
@@ -2557,7 +2566,6 @@ answer
 ;;  deep-copy everything is okay
 ;;  vals need to be a data structure. e.g. [ regular-val, provenance tree ]
 ;;  when we apply, the provenance tree gets mutated some
-
 
 
 

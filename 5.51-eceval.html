@@ -57,10 +57,18 @@
 (define (hundredfold x) (if (> x 8) (error "bad x value") (* x 100)))
 (answer 1 2) ; => error
 
-"lambda and let"
+"--lambda and let--"
 ((lambda (x) (+ x 1)) 3)
 (let ((x 3)) (+ x 1))
-	  
+
+"--needed scheme functions--"
+(define (assoc x a)
+  (if (car a)
+      (if (equal? x (caar a))
+	  (car a)
+	  (assoc x (cdr a)))
+      false))	  
+
 "--Solve a KenKen puzzle--"
 (define (cadr-assoc x a) 
   (if (assoc x a)

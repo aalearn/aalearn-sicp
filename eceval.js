@@ -342,6 +342,7 @@ function eceval_step() {
 function cons(a, b) { return [a, b]; }
 function car(a) { return a[0]; }
 function cdr(a) { return a[1]; }
+function caar(a) { return car(car(a)); }
 function cadr(a) { return car(cdr(a)); }
 function cdar(a) { return cdr(car(a)); }
 function cddr(a) { return cdr(cdr(a)); }
@@ -353,6 +354,31 @@ function cadddr(a) { return caddr(cdr(a)); }
 function last(a) { return cdr(a).length == 0 }
 
 function list(a) { return a.length == 0 ? [] : cons(car(a), list(cdr(a))); }
+function and(a) { 
+    if (a.length == 0) {
+	return true;
+    } else if (evaluates_to_true(car(a))) {
+	return last(a) ? car(a) : and(cdr(a));
+    } else {
+	return false;
+    }
+}
+function or(a) {
+    if (a.length == 0) {
+	return false;
+    } else if (evaluates_to_true(car(a))) {
+	return car(a);
+    } else {
+	return or(cdr(a));
+    }
+}
+function equal(a) {
+    if (a.length == 0 || last(a)) {
+	return true;
+    } else {
+	return car(a) == cadr(a) && equal(cdr(a));
+    }
+}
 
 var primitive_operations = {
     '+': function(a) { return car(a) + cadr(a) },
@@ -367,9 +393,14 @@ var primitive_operations = {
     'cons': function(a) { return cons(car(a), cadr(a)); },
     'car': function(a) { return car(car(a)) },
     'cdr': function(a) { return cdr(car(a)) },
+    'caar': function(a) { return caar(car(a)) },
     'cadr': function(a) { return cadr(car(a)) },
     'cdar': function(a) { return cdar(car(a)) },
+    'cddr': function(a) { return cddr(car(a)) },
     'list': list,
+    'and': and,
+    'or': or,
+    'equal?': equal,
     'display': announce_output
 };
 
