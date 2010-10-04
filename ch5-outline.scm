@@ -2501,7 +2501,7 @@ ok
 ;; some needed functions
 "--needed scheme functions--"
 (define (assoc x a)
-  (if (car a)
+  (if (pair? a)
       (if (equal? x (caar a))
 	  (car a)
 	  (assoc x (cdr a)))

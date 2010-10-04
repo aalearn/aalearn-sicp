@@ -9,29 +9,52 @@ function debug_stack() { console.log('Stack:'); console.log(stack) }
 
 // --- Environment ---
 // stored as a javascript array of javascript hashes (objects)
-var env = [{}];
+var Frame = {
+    // ---- basics, utilities ----
+    init: function(variables, values, code_source, code_symbol) {
+	var newObject = Object.create(this);
+	newObject.data = this.make_map(variables, values);
+	newObject.code_source = code_source;
+	newObject.code_symbol = code_symbol;
+	return newObject;
+    },
+    make_map: function(variables, values) {
+	var frame = {};
+	for (var i = 0, len = variables.length; i < len; i++) {
+	    frame[variables[i]] = values[i];
+	}
+	return frame;
+    },
+    data_to_s: function() {
+	var out = '';
+	for (var k in this.data) {
+	    out += k + ': ' + this.data[k] + ', ';
+	}
+	// disabled, littered with everything in the environment, when actually proc call variables would be most interesting
+	// return out;
+    },
+    trace_line: function() {
+	return this.code_symbol + this.code_source;
+    },
+};
+
+var env = [Frame.init([],[],' at top-level')];
 var unbound_variable_error = ['error', 'unbound_variable'];
 
 function new_env() { return {} };
 
-function make_frame(variables, values) {
-    var frame = {};
-    for (var i = 0, len = variables.length; i < len; i++) {
-	frame[variables[i]] = values[i];
-    }
-    return frame;
-}
-
-function extend_environment(variables, values, env) {
-    return [make_frame(
+function extend_environment(variables, values, env, code_source, code_symbol) {
+    return [Frame.init(
 	$.map(ast_to_js_style_array(variables), symbol_name), 
-	ast_to_js_style_array(values))].concat(env);
+	ast_to_js_style_array(values),
+	code_source, code_symbol)].concat(env);
 }
 
 function lookup_variable_value(variable, env) {
     for (i = 0, len = env.length; i < len; i++) {
-	if (env[i].hasOwnProperty(variable)) {
-	    return env[i][variable];
+	frame_data = env[i].data;
+	if (frame_data.hasOwnProperty(variable)) {
+	    return frame_data[variable];
 	}
     }
     return unbound_variable_error;
@@ -40,12 +63,13 @@ function lookup_variable_value(variable, env) {
 // different from text: okay to set something previously undefined
 function set_variable_value(variable, value, env) {
     for (i = 0, len = env.length; i < len; i++) {
-	if (env[i].hasOwnProperty(variable)) {
-	    env[i][variable] = value;
+	frame_data = env[i].data;
+	if (frame_data.hasOwnProperty(variable)) {
+	    frame_data[variable] = value;
 	    return;
 	}
     }
-    env[0][variable] = value;
+    frame_data[variable] = value;
 }
 
 function define_variable(variable, value, env) {
@@ -64,7 +88,7 @@ var continue_to;
 var val;
 var proc;
 
-var run_tree, call_stack;
+var proc_call_stack;
 var start_exp, prev_exp;
 
 function evaluate(ast) {
@@ -74,14 +98,14 @@ function evaluate(ast) {
     val = undefined;
     exp = ast;
     var count = 0;
-    run_tree = [];
+    proc_call_stack = [];
     start_exp = undefined;
     prev_exp = undefined;
     while (branch !== 'done') {
 	prev_exp = start_exp;
 	start_exp = exp;
 	eceval_step();
-	if (count++ > 999) {
+	if (count++ > 2999) {
 	    branch = 'done';
 	    console.log('infinite loop guard');
 	}
@@ -90,8 +114,8 @@ function evaluate(ast) {
 }
 
 function eceval_step() {
-    // console.log(branch);
-    // console.log(exp);
+    console.log(branch);
+    console.log(exp);
     switch(branch) {
 	
     case 'eval-dispatch':
@@ -152,6 +176,8 @@ function eceval_step() {
 	unev = operands(exp);
 	exp = operator(exp);
 	if (symbol(exp)) {
+	    proc_call_stack.push(symbol_name(exp) + ' called' + code_source(exp));
+
 	    // ev-operator-symbol
 	    proc = lookup_variable_value(symbol_name(exp), env);
 
@@ -174,6 +200,7 @@ function eceval_step() {
 		branch = 'ev-appl-did-operator-symbol';
 	    }
 	} else {
+	    proc_call_stack.push("anonymous procedure called" + code_source(exp));
 	    save(env);
 	    save(unev);
 	    continue_to = 'ev-appl-did-operator';
@@ -230,9 +257,14 @@ function eceval_step() {
 	    branch = 'signal-error';
 	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
-	    val = apply_primitive_procedure(proc, argl);
-	    continue_to = restore();
-	    branch = continue_to;
+	    try {
+		val = apply_primitive_procedure(proc, argl);
+		continue_to = restore();
+		branch = continue_to;
+	    } catch(err) {
+		val = 'applying primitive: ' + err;
+		branch = 'signal-error';
+	    }
 	} else if (compound_procedure(proc)) {
 	    branch = 'compound-apply';
 	} else {
@@ -242,7 +274,7 @@ function eceval_step() {
     case 'compound-apply':
 	unev = procedure_parameters(proc);
 	env = procedure_environment(proc);
-	env = extend_environment(unev, argl, env);
+	env = extend_environment(unev, argl, env, code_source(exp), symbol_name(exp));
 	unev = procedure_body(proc);
 	branch = 'ev-sequence';
 	break;
@@ -330,6 +362,7 @@ function eceval_step() {
 
     case 'signal-error':
 	val = 'ERROR: ' + val;
+	val = val + "\n* " + proc_call_stack.reverse().join("\n* ");
 	branch = 'done';
 	break;
     default:
@@ -397,6 +430,7 @@ var primitive_operations = {
     'cadr': function(a) { return cadr(car(a)) },
     'cdar': function(a) { return cdar(car(a)) },
     'cddr': function(a) { return cddr(car(a)) },
+    'pair?': function(a) { return pair(car(a)) },
     'list': list,
     'and': and,
     'or': or,

@@ -28,7 +28,11 @@
 (+ (* 4 5) (* 3 2))
 
 "--error correctly handled--"
-(+ 8 foo)
+(define (error-inner x)
+  (+ 8 foo))
+(define (error-outer x)
+  (error-inner x))
+(error-outer 1)
 
 "--list examples--"
 (cons 1 2)
@@ -63,10 +67,10 @@
 
 "--needed scheme functions--"
 (define (assoc x a)
-  (if (car a)
+  (if (pair? a)
       (if (equal? x (caar a))
-	  (car a)
-	  (assoc x (cdr a)))
+          (car a)
+          (assoc x (cdr a)))
       false))	  
 
 "--Solve a KenKen puzzle--"

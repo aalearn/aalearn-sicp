@@ -9,7 +9,7 @@ function announce_html_output(out) {
 }
 
 function announce_output(out) {
-    $('#repl').append($('<div class="output" />').text(out));
+    $('#repl').append($('<div class="output" />').html(('' + out).replace(/\n/g,'<br />')));
 }
 
 function wait_for_input(focus_on_repl) {
