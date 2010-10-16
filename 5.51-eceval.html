@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="./screen.css" type="text/css" media="screen, projection" />
 <script language="javascript" src="./jquery-1.4.2.js"></script>
 <script language="javascript" src="./jquery.json-2.2.min.js"></script>
+<script language="javascript" src="./jquery.scrollTo-1.4.2-min.js"></script>
 <script language="javascript" src="./jquery.hotkeys.js"></script>
 
 <script language="javascript" src="./eceval-io.js"></script>
@@ -17,12 +18,10 @@
   <div id="repl"></div>
 
   <div id="buffer-frame">
-    <div id="buffer-intro">Buffer (Alt-R: 
-    eval all)</div>
-    <div id="buffer-inner-frame">
+   <div id="buffer-inner-frame">
       <div id="line-numbers"></div>
         <div id="buffer" contenteditable="true">
-
+"Buffer: Alt-R to execute all"
 "--basic math--"
 (+ 2 3)
 (+ (* 4 5) (* 3 2))

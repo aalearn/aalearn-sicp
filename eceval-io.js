@@ -19,6 +19,7 @@ function wait_for_input(focus_on_repl) {
     if (focus_on_repl) {
 	new_input.focus();
     }
+    setTimeout(function() { $('#repl').scrollTo('max', 250) }, 5); // scroll to bottom
 }
 
 $.fn.addBindings = function() {
@@ -47,6 +48,24 @@ $.fn.addBindings = function() {
     });
 };
 
+$('.code-source').live('click', function() {
+    var observed_line_height = $('#buffer-inner-frame')[0].scrollHeight / buffer_line_count();
+    $('#buffer-inner-frame').scrollTo((parseInt($(this).attr('num')) - 10 )* observed_line_height, 200, {axis:'y'});
+});
+
+// not used yet, but might help with flashing/highlighting a particular line 
+$.fn.textNodes = function() {
+  var ret = [];
+  this.each( function() {
+    var fn = arguments.callee;
+    $(this).contents().each( function() {
+      if ( this.nodeType == 3  ) // || $.nodeName(this, "br")
+        ret.push( this );
+      else fn.apply( $(this) );
+    });
+  });
+  return $(ret);
+}
 
 function set_new_history(target, source) {
     target.text(source.addClass('history-selection').text());
@@ -98,18 +117,21 @@ function fix_buffer_display() {
     buffer_lines = $.map(buffer_lines, function(x) { return x.replace(/ /g, '&nbsp;') })
     $('#buffer').html(buffer_lines.join('<br/>'));
     fix_line_numbering(buffer_lines.length - 1);
+}
 
+function buffer_line_count() {
+    var len = $('#buffer br').length;
+    $('#buffer div').each(function(i, e) {
+	// contenteditable appears to insert divs if there's content,
+	// and insert brs for whitespace only lines
+	// could be SLOW
+	if (!$(e).find('br').length) len++
+    });
+    return len;
 }
 
 function fix_line_numbering(len) {
-    if (!len) {
-	// contenteditable appears to insert divs if there's content,
-	// and insert brs for whitespace only lines
-	len = $('#buffer br').length;
-	$('#buffer div').each(function(i, e) {
-	    if (!$(e).find('br').length) len++
-	});
-    }
+    len = len ? len : buffer_line_count();
     var line_numbering = '';
     for (i = 1; i <= len; i++) {
 	line_numbering += i + '<br/>';

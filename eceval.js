@@ -531,7 +531,7 @@ function code_source(exp) {
     } else if (exp[2] == 'n/a') {
 	return 'n/a';
     } else {
-	return ' on line ' + exp[2];
+	return ' on <a class="code-source" num="' + exp[2] + '">line ' + exp[2] + "</a>";
     }
 }
 
