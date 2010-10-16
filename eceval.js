@@ -114,8 +114,8 @@ function evaluate(ast) {
 }
 
 function eceval_step() {
-    console.log(branch);
-    console.log(exp);
+    // console.log(branch);
+    // console.log(exp);
     switch(branch) {
 	
     case 'eval-dispatch':
@@ -261,6 +261,7 @@ function eceval_step() {
 		val = apply_primitive_procedure(proc, argl);
 		continue_to = restore();
 		branch = continue_to;
+		proc_call_stack.pop();
 	    } catch(err) {
 		val = 'applying primitive: ' + err;
 		branch = 'signal-error';
@@ -301,9 +302,19 @@ function eceval_step() {
 	branch = 'ev-sequence';
 	break;
     case 'ev-sequence-last-exp':
-	continue_to = restore();
+	continue_to = 'pop-proc-call-stack';
 	branch = 'eval-dispatch';
 	break;
+    case 'pop-proc-call-stack':
+	// new branch just for handling proc_call_stack just in case of compound apply's last expressions
+	//  when evaluating the last expression in compound apply,
+	//  we want the proc_call_stack to still be complete
+	//  but once we're done evaluating that expression, we want to get rid of potentially
+	//  many entries in the proc_call_stack all at once.
+	proc_call_stack.pop();
+	continue_to = restore();
+	branch = continue_to;
+	break;	
     case 'ev-if':
 	save(exp);
 	save(env);
