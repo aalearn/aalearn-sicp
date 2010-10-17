@@ -7,6 +7,21 @@ function save(x) {
 function restore() { return stack.pop(); }
 function debug_stack() { console.log('Stack:'); console.log(stack) }
 
+// enhanced value object wraps all scheme values!
+var Value = {
+    init: function(val, source_exp) {
+	var newObject = Object.create(this);
+	newObject.value = val;
+	newObject.source_exp = source_exp;
+	newObject.wrapped_value = true;
+	return newObject;
+    },
+    with_lookup_exp: function(lookup_exp) {
+	this.lookup_exp = lookup_exp;
+	return this;
+    },
+};
+
 // --- Environment ---
 // stored as a javascript array of javascript hashes (objects)
 var Frame = {
@@ -21,17 +36,9 @@ var Frame = {
     make_map: function(variables, values) {
 	var frame = {};
 	for (var i = 0, len = variables.length; i < len; i++) {
-	    frame[variables[i]] = values[i];
+	    frame[variables[i]] = Value.init(values[i],'n/a');
 	}
 	return frame;
-    },
-    data_to_s: function() {
-	var out = '';
-	for (var k in this.data) {
-	    out += k + ': ' + this.data[k] + ', ';
-	}
-	// disabled, littered with everything in the environment, when actually proc call variables would be most interesting
-	// return out;
     },
     trace_line: function() {
 	return this.code_symbol + this.code_source;
@@ -50,30 +57,35 @@ function extend_environment(variables, values, env, code_source, code_symbol) {
 	code_source, code_symbol)].concat(env);
 }
 
-function lookup_variable_value(variable, env) {
+function lookup_variable_value(variable, env, lookup_exp, include_context) {
     for (i = 0, len = env.length; i < len; i++) {
 	frame_data = env[i].data;
 	if (frame_data.hasOwnProperty(variable)) {
-	    return frame_data[variable];
+	    if (include_context) {
+		// record where the variable was looked up, e.g. for stack trace
+		return frame_data[variable].with_lookup_exp(lookup_exp);
+	    } else {
+		return frame_data[variable].value;
+	    }
 	}
     }
     return unbound_variable_error;
 }
 
 // different from text: okay to set something previously undefined
-function set_variable_value(variable, value, env) {
+function set_variable_value(variable, value, env, exp) {
     for (i = 0, len = env.length; i < len; i++) {
 	frame_data = env[i].data;
 	if (frame_data.hasOwnProperty(variable)) {
-	    frame_data[variable] = value;
+	    frame_data[variable] = Value.init(value, exp);
 	    return;
 	}
     }
-    frame_data[variable] = value;
+    frame_data[variable] = Value.init(value, exp);
 }
 
-function define_variable(variable, value, env) {
-    set_variable_value(variable, value, env);
+function define_variable(variable, value, env, exp) {
+    set_variable_value(variable, value, env, exp);
 }
     
 
@@ -112,6 +124,8 @@ function evaluate(ast) {
     }
     return val;
 }
+
+var debug_p;
 
 function eceval_step() {
     // console.log(branch);
@@ -176,11 +190,8 @@ function eceval_step() {
 	unev = operands(exp);
 	exp = operator(exp);
 	if (symbol(exp)) {
-	    proc_call_stack.push(symbol_name(exp) + ' called' + code_source(exp));
-
 	    // ev-operator-symbol
-	    proc = lookup_variable_value(symbol_name(exp), env);
-
+	    proc = lookup_variable_value(symbol_name(exp), env, exp, 'include_context');
 	    if (proc == unbound_variable_error) {
 		if (macro(exp)) {
 		    exp = macro_expand(original_expression);
@@ -200,7 +211,6 @@ function eceval_step() {
 		branch = 'ev-appl-did-operator-symbol';
 	    }
 	} else {
-	    proc_call_stack.push("anonymous procedure called" + code_source(exp));
 	    save(env);
 	    save(unev);
 	    continue_to = 'ev-appl-did-operator';
@@ -258,6 +268,10 @@ function eceval_step() {
 	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
 	    try {
+		proc_call_stack.push(symbol_name(primitive_procedure_exp(proc)) 
+				     + '(primitive) called' 
+				     + code_source(primitive_procedure_exp(proc)));
+
 		val = apply_primitive_procedure(proc, argl);
 		continue_to = restore();
 		branch = continue_to;
@@ -266,16 +280,32 @@ function eceval_step() {
 		val = 'applying primitive: ' + err;
 		branch = 'signal-error';
 	    }
-	} else if (compound_procedure(proc)) {
+	} else if (compound_procedure(proc.wrapped_value ? proc.value : proc)) {
 	    branch = 'compound-apply';
 	} else {
 	    branch = 'unknown-procedure-type';
 	}
 	break;
     case 'compound-apply':
+	// currently this has access to both where/how a function was defined
+	//  and where it was called from
+	if (proc.wrapped_value) {
+	    var calling_exp = proc.lookup_exp;
+	    proc_call_stack.push(
+		(symbol(calling_exp) 
+		 ? symbol_name(calling_exp) 
+		 : "anonymous procedure")
+		    + " called " + code_source(calling_exp));
+	    proc = proc.value;
+	} else {
+	    proc_call_stack.push('computed procedure called');
+	}
+
+	// TODO: trap wrong arity
+
 	unev = procedure_parameters(proc);
 	env = procedure_environment(proc);
-	env = extend_environment(unev, argl, env, code_source(exp), symbol_name(exp));
+	env = extend_environment(unev, argl, env);
 	unev = procedure_body(proc);
 	branch = 'ev-sequence';
 	break;
@@ -354,7 +384,9 @@ function eceval_step() {
 	break;
 
     case 'ev-definition':
-	unev = definition_variable(exp);
+	// changed to keep around more of "exp" in order to keep
+	// code-source details for better stacktraces
+	unev = exp;
 	save(unev);
 	exp = definition_value(exp);
 	save(env);
@@ -366,7 +398,9 @@ function eceval_step() {
 	continue_to = restore();
 	env = restore();
 	unev = restore();
-	define_variable(symbol_name(unev), val, env);
+	var original_define_exp = unev;
+	unev = definition_variable(unev);
+	define_variable(symbol_name(unev), val, env, original_define_exp);
 	val = 'ok: ' +  symbol_name(unev);
 	branch = continue_to;
 	break;
@@ -467,11 +501,15 @@ function primitive_procedure(proc) {
 }
 
 function primitive_procedure_proc(exp) {
-    return [['symbol','primitive'], [ primitive_operations[exp[1]], [] ] ];
+    return [['symbol','primitive'], [ primitive_operations[exp[1]], [exp, []] ] ];
 }
 
 function apply_primitive_procedure(proc, argl) {
     return cadr(proc).apply(undefined, [argl]);
+}
+
+function primitive_procedure_exp(proc) {
+    return car(cddr(proc));
 }
 
 // ---- Macros ----
@@ -589,6 +627,7 @@ function make_procedure(parameters, body, env) {
 var procedure_parameters = cadr;
 var procedure_body = caddr;
 var procedure_environment = cadddr;
+var procedure_exp = function(p) { return cadddr(cdr(p)); }
 
 function begin(exp) { return tagged_list(exp, 'begin'); }
 var begin_actions = cdr;

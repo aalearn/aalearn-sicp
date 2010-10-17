@@ -91,7 +91,6 @@ function qeval(exp) { // quick eval of a string for debugging purposes
     return evaluate(parse(tokenize(exp))[0]);
 }
 
-
 function install_page_level_bindings() {
     $(document).bind('keydown','ctrl+c', function() {
 	// currently not-enabled -- needs to set user_stop
