@@ -87,3 +87,7 @@ body {
     color: #6D7F9F;
     cursor: pointer;
 }
+.non-code-source-info {
+    color: #6D9F7F;
+    cursor: pointer;
+}

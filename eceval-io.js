@@ -54,6 +54,11 @@ $('a.code-source').live('click', function() {
     return false;
 });
 
+$('a.non-code-source-info').live('click', function() {
+    var item = $('#' + $(this).attr('id')).parent();
+    $('<div class="output" />').html($(this).attr('info')).insertAfter(item);
+});
+
 // not used yet, but might help with flashing/highlighting a particular line 
 $.fn.textNodes = function() {
   var ret = [];

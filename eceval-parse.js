@@ -67,7 +67,7 @@ function tokenize(html, from_repl) {
 	    continue;
 	} else if (c == ';') {
 	    line_level_comment = true;
-	} else if (/[a-zA-Z_<>\+\/\-\=\*\/\!\?\-]/.exec(c)) {
+	} else if (/[a-zA-Z_<>\+\/\-\=\*\/\!\?\-\#]/.exec(c)) {
 	    if (last_token && last_token[0] == 'symbol') {
 		last_token[1] += c;
 	    } else {
@@ -208,9 +208,19 @@ function stringify_abstract_syntax_tree(exp, skip_parens, count) {
     }
 }
 
+var info_id = 1;
 function stringify_scheme_exp(exp, skip_parens) {
     if (exp == undefined) {
 	return 'nil';
+    } else if (exp.wrapped_value) {
+	// slightly spaghetti-ish
+	// this code relies on the Value class, which is in eceval.js
+	// also relies on jQuery for escaping
+	return $("<div />").html(
+	    $('<a class="non-code-source-info" />')
+		.attr('info', exp.source_exp)
+		.attr('id', info_id++)
+		.html(stringify_scheme_exp(exp.value))).html();
     } else if (!(exp instanceof Array)) {
 	return exp;
     } else {

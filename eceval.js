@@ -138,10 +138,10 @@ function eceval_step() {
 	    branch = 'signal-error';
 	} else if (self_evaluating(exp)) {
 	    // ev-self-eval
-	    val = self_evaluated(exp);
+	    val = wrap_self_evaluated(exp);
 	    branch = continue_to;
 	} else if (quoted(exp)) {
-	    val = text_of_quotation(exp);
+	    val = wrap_text_of_quotation(exp);
 	    branch = continue_to;
 	} else if (variable(exp)) { 
 	    // ev-variable
@@ -286,7 +286,7 @@ function eceval_step() {
 			+ ') called' 
 			+ code_source(primitive_procedure_exp(proc)));
 
-		val = apply_primitive_procedure(proc, argl);
+		val = wrap_apply_primitive_procedure(proc, argl, symbol_name(primitive_procedure_exp(proc)));
 		continue_to = restore();
 		branch = continue_to;
 		proc_call_stack.pop();
@@ -613,7 +613,8 @@ function cond_to_if(a) {
 // ---- Syntax ----
 function self_evaluating(exp) {
     return exp[0] == 'number' || exp[0] == 'text-literal' 
-	|| exp[1] == 'true' || exp[1] == 'false';
+	|| exp[1] == 'true' || exp[1] == 'false'
+	|| exp[1] == '#t' || exp[1] == '#f';
 }
 
 function self_evaluated(exp) {
@@ -621,9 +622,9 @@ function self_evaluated(exp) {
 	return parseFloat(exp[1]);
     } else if (exp[0] == 'text-literal') {
 	return exp[1];
-    } else if (exp[1] == 'false') {
+    } else if (exp[1] == 'false' || exp[1] == '#f') {
 	return false;
-    } else if (exp[1] == 'true') {
+    } else if (exp[1] == 'true' || exp[1] == '#t') {
 	return true;
     }
 }
@@ -760,12 +761,30 @@ function compound_procedure(proc) {
 }
 
 // ---- debugger support ----
+function unwrap_values(argl) {
+    return scheme_map(function(x) { return x.value }, argl);
+}
+
 function printable_argl(argl) {
     return argl.length > 0 ? ' ' 
     
-	+ $.map(scheme_to_js_style_array(argl), function(e,i) { 
+	+ $.map(scheme_to_js_style_array(unwrap_values(argl)), function(e,i) { 
 	    return compound_procedure(e) ? "[compound-procedure]" : stringify_scheme_exp(e);
 	}).join(' ')
 
 	: '';
+}
+
+function wrap_self_evaluated(exp) {
+    return Value.init(self_evaluated(exp), 'self-evaluated' + code_source(exp));
+}
+
+function wrap_apply_primitive_procedure(proc, argl, symbol_name) {
+    return Value.init(
+	apply_primitive_procedure(proc, unwrap_values(argl)),
+	'(' + symbol_name + '[primitive] ' + printable_argl(argl) + ')');
+}
+
+function wrap_text_of_quotation(exp) {
+    return Value.init(text_of_quotation(exp), 'quoted' + code_source(exp));
 }
