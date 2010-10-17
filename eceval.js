@@ -491,6 +491,7 @@ var primitive_operations = {
     'and': and,
     'or': or,
     'equal?': equal,
+    'eq?': equal,
     'display': announce_output
 };
 
@@ -526,8 +527,8 @@ function macro(exp) {
 function macro_expand(exp) {
     if (symbol_name(car(exp)) == "let") {
 	return let_to_lambda(exp);
-    } else if (symbol_name(exp) == "cond") {
-	console.log("error: cond is not implemented");
+    } else if (symbol_name(car(exp)) == "cond") {
+	return cond_to_if(exp);
     } else {
 	console.log("error: unable to expand macro!");
     }
@@ -542,10 +543,46 @@ function scheme_map(f, a) {
     }
 }
 function let_to_lambda(a) {
-    return [[['symbol','lambda',exp[2]],
+    return [[['symbol','lambda',a[2]],
 	     [ scheme_map(car, let_assignments(a)),
 	       let_body(a) ]],
 	    car(scheme_map(cdr, let_assignments(a)))];
+}
+
+function make_if(predicate, consequent, alternative) {
+    return [['symbol','if', 'n/a'], // TODO: this n/a could be fixed
+	     [ predicate, [ consequent, [alternative, []]]]];
+}
+
+function sequence_to_exp(seq) {
+    if (!seq || seq.length == 0) {
+	return seq;
+    } else if (last(seq)) {
+	return car(seq);
+    } else {
+	return cons(['symbol','begin','n/a'], seq);
+    }
+}
+function expand_clauses(clauses) {
+    if (!clauses || clauses.length == 0) {
+	return ['symbol','false','n/a'];
+    } else if (symbol_name(caar(clauses)) == 'else') {
+	if (last(clauses)) {
+	    return sequence_to_exp(cdar(clauses));
+	} else {
+	    console.log('else clause is not last in cond macro');
+	    return [];
+	}
+    } else {
+	return make_if(
+	    caar(clauses), 
+	    sequence_to_exp(cdar(clauses)), 
+	    expand_clauses(cdr(clauses)));
+    }
+}
+function cond_to_if(a) {
+    var o = expand_clauses(cdr(a));
+    return o;
 }
 
 // ---- Syntax ----
