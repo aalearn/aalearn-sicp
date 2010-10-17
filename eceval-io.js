@@ -48,9 +48,10 @@ $.fn.addBindings = function() {
     });
 };
 
-$('.code-source').live('click', function() {
+$('a.code-source').live('click', function() {
     var observed_line_height = $('#buffer-inner-frame')[0].scrollHeight / buffer_line_count();
     $('#buffer-inner-frame').scrollTo((parseInt($(this).attr('num')) - 10 )* observed_line_height, 200, {axis:'y'});
+    return false;
 });
 
 // not used yet, but might help with flashing/highlighting a particular line 

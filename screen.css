@@ -79,7 +79,10 @@ body {
 .input:focus {
     background-color: #0D1F2F;
 }
-    
+
+.error-beacon {
+    color: #ED9F8F;
+}    
 .code-source {
     color: #6D7F9F;
     cursor: pointer;

@@ -39,6 +39,7 @@
 (cons 1 '())
 (cons 1 (cons 2 (cons 3 '())))
 (cons 1 (if false '() 2))
+(list 1 2 3)
 
 "--quoting example--"
 ; '(a b)  ; still broken
@@ -71,6 +72,12 @@
           (car a)
           (assoc x (cdr a)))
       false))     
+
+(define (map f a)
+  (if (null? a)
+      '()
+      (cons (f (car a)) (map f (cdr a)))))
+(map inc (list 1 2 3))
 
 "--Solve a KenKen puzzle--"
 (define (cadr-assoc x a) 

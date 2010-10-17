@@ -330,7 +330,7 @@ function eceval_step() {
 	if (evaluates_to_true(val)) {
 	    exp = if_consequent(exp);
 	} else {
-	    exp = if_alternative(exp);
+	    exp = if_alternative(exp) || ['symbol','false','n/a']; // handle if without else clause
 	}
 	branch = 'eval-dispatch';
 	break;
@@ -372,7 +372,7 @@ function eceval_step() {
 	break;
 
     case 'signal-error':
-	val = 'ERROR: ' + val;
+	val = '<span class="error-beacon">ERROR: </span> ' + val;
 	val = val + "\n* " + proc_call_stack.reverse().join("\n* ");
 	branch = 'done';
 	break;
@@ -397,7 +397,11 @@ function cadddr(a) { return caddr(cdr(a)); }
 
 function last(a) { return cdr(a).length == 0 }
 
-function list(a) { return a.length == 0 ? [] : cons(car(a), list(cdr(a))); }
+function list(a) { return a.length == 0 ? undefined : cons(car(a), list(cdr(a))); }
+// function list(a) { return a.slice(0) }
+
+function is_null(a) { return !a || a.length == 0 }
+
 function and(a) { 
     if (a.length == 0) {
 	return true;
@@ -443,6 +447,7 @@ var primitive_operations = {
     'cddr': function(a) { return cddr(car(a)) },
     'pair?': function(a) { return pair(car(a)) },
     'list': list,
+    'null?': is_null,
     'and': and,
     'or': or,
     'equal?': equal,
@@ -527,9 +532,9 @@ function symbol_name(exp) {
 
 function code_source(exp) {
     if (exp[2] == 'repl' || !exp) {
-	return 'from repl';
+	return ' from repl';
     } else if (exp[2] == 'n/a') {
-	return 'n/a';
+	return ' n/a';
     } else {
 	return ' on <a class="code-source" num="' + exp[2] + '">line ' + exp[2] + "</a>";
     }
@@ -617,7 +622,7 @@ function text_of_quotation(exp) {
 
 function text_of_item(exp) {
     if (exp instanceof Array && !exp.length) {
-	return undefined;
+	return undefined; // our js represenation of nil
     } else if (is_token(exp) || symbol(exp)) {
 	return exp[1];
     } else {
@@ -631,7 +636,9 @@ function adjoin_arg(arg, arglist) {
 	return [arg, []];
     } else {
 	var dupe = arglist.slice(0);
-	dupe[dupe.length - 1] = [arg, []];
+	var iter = dupe;
+	while (!last(iter)) { iter = cdr(iter) }
+	iter[1] = [arg, []];
 	return dupe;
     }
 }
