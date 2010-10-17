@@ -19,7 +19,7 @@ function wait_for_input(focus_on_repl) {
     if (focus_on_repl) {
 	new_input.focus();
     }
-    setTimeout(function() { $('#repl').scrollTo('max', 250) }, 5); // scroll to bottom
+    setTimeout(function() { $('#repl').scrollTo('max', 250, {axis:'y'}) }, 5); // scroll to bottom
 }
 
 $.fn.addBindings = function() {
@@ -96,9 +96,9 @@ function install_page_level_bindings() {
 	// currently not-enabled -- needs to set user_stop
 	// eceval also needs to allow this event to run in between iterations
     });
-    $('#repl, #footer').bind('click', function() {
-	$('.input').last().focus();
-    });
+    // $('#repl, #footer').bind('click', function() {
+    // 	$('.input').last().focus();
+    // });
 }
 
 // --- Buffer-related ---
