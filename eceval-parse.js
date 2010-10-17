@@ -134,7 +134,7 @@ function parse(tokens) {
 	    // ignore
 	} else {
 	    if (quote_next) {
-		insert_points[insert_points.length-1].push([['symbol','quote'],[token, []]]);
+		insert_points[insert_points.length-1].push(['quoted-token',token[1],token[2]]);
 		quote_next = false;
 	    } else {
 		insert_points[insert_points.length-1].push(token);

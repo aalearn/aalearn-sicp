@@ -66,6 +66,8 @@
 (let ((x 3)) (+ x 1))
 
 "--cond and eq?--"
+(eq? 'x 'x)
+(eq? 'x (car '(x y)))
 (cond (false 2) (true 4))
 (cond (else 5))
 (cond ((eq? 6 (+ 1 5)) 6) (else (error "no")))
@@ -136,6 +138,15 @@
 (define (any-permutation-equals? result op args)
   (any? (map (lambda (x) (= result (apply op x))) (permutations args))))
 
+(define (check-math result op args)
+  (cond ((eq? op '=) (= result (car args)))
+        ((eq? op '+) (= result (apply + args)))
+        ((eq? op '*) (= result (apply * args)))
+        ((eq? op '/) (any-permutation-equals? result / args))
+        ((eq? op '-) (any-permutation-equals? result - args))))
+(check-math 7 '+ (list 3 4))
+(check-math 8 '= (list 8))
+
 (define (solve-kenken size constraints)
   (define (valid-row? j board)
     (define (iter n numbers-seen)
@@ -160,13 +171,7 @@
                     (iter (+ n 1) (cons filled-number numbers-seen)))))))
     (iter 1 '()))
 
-  (define (check-math result op args)
-    (cond ((eq? op '+) (= result (apply + args)))
-          ((eq? op '*) (= result (apply * args)))
-          ((eq? op '/) (any-permutation-equals? result / args))
-          ((eq? op '-) (any-permutation-equals? result - args))))
-
-  (define (fits-constraints? board rem-constraints)
+ (define (fits-constraints? board rem-constraints)
     (if (null? rem-constraints)
         true
         (let ((constraint (car rem-constraints)))

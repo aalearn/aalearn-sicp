@@ -2289,7 +2289,7 @@ ok
 ; expressions that can't really be compiled, like "'(a b)" and "cons"
 ; Fixable.
 
-;;  * _ Exercise 5.51
+;;  * _ Exercise 5.50
 
 ; compiler needs to learn how to compile "let" -- DONE
 ; eceval interpreter not comfortable with "cond/let" -- ignored for now, just fixed compiler

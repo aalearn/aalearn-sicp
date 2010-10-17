@@ -117,7 +117,7 @@ function evaluate(ast) {
 	prev_exp = start_exp;
 	start_exp = exp;
 	eceval_step();
-	if (count++ > 2999) {
+	if (count++ > 12999) {
 	    branch = 'done';
 	    console.log('infinite loop guard');
 	}
@@ -147,8 +147,13 @@ function eceval_step() {
 	    // ev-variable
 	    val = lookup_variable_value(symbol_name(exp), env);
 	    if (val == unbound_variable_error) {
-		val = 'unbound symbol: ' + symbol_name(exp) + ', ' + code_source(exp);
-		branch = 'signal-error';
+		if (primitive_op(exp)) {
+		    val = primitive_procedure_proc(exp);
+		    branch = continue_to;
+		} else {
+		    val = 'unbound symbol: ' + symbol_name(exp) + ', ' + code_source(exp);
+		    branch = 'signal-error';
+		}
 	    } else {
 		branch = continue_to;
 	    }
@@ -196,10 +201,12 @@ function eceval_step() {
 		if (macro(exp)) {
 		    exp = macro_expand(original_expression);
 		    branch = 'eval-dispatch'; // try again, with mutated exp
-		}
-		// hacked -- a little different from the text
-		else if (primitive_op(exp)) {
+		} else if (primitive_op(exp)) {
+		    // hacked -- a little different from the text
 		    proc = primitive_procedure_proc(exp);
+		    branch = 'ev-appl-did-operator-symbol';
+		} else if (symbol_name(exp) == "apply") {
+		    proc = [['symbol','apply',exp[2]],[]];
 		    branch = 'ev-appl-did-operator-symbol';
 		} else if (symbol_name(exp) == "error") {
 		    proc = [['symbol','error'], []];
@@ -265,6 +272,10 @@ function eceval_step() {
 	if (error_procedure(proc)) {
 	    val = scheme_to_js_style_array(argl).join(' ');
 	    branch = 'signal-error';
+	} else if (explicit_apply_procedure(proc)) {
+	    proc = car(argl);
+	    argl = cadr(argl);
+	    branch = 'apply-dispatch';	    
 	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
 	    try {
@@ -435,7 +446,7 @@ function caddr(a) { return cadr(cdr(a)); }
 function cdadr(a) { return cdr(cadr(a)); }
 function cadddr(a) { return caddr(cdr(a)); }
 
-function last(a) { return cdr(a).length == 0 }
+function last(a) { return !cdr(a) || cdr(a).length == 0 }
 
 function list(a) { return a.length == 0 ? undefined : cons(car(a), list(cdr(a))); }
 // function list(a) { return a.slice(0) }
@@ -468,12 +479,22 @@ function equal(a) {
     }
 }
 
+function endlessly(f, a) {
+    if (a.length == 0) {
+	return 0;
+    } else if (last(a)) {
+	return car(a);
+    } else {
+	return endlessly(f, cons(f(car(a), cadr(a)), cddr(a)));
+    }
+}
+	
 var primitive_operations = {
-    '+': function(a) { return car(a) + cadr(a) },
-    '-': function(a) { return car(a) - cadr(a) },
-    '*': function(a) { return car(a) * cadr(a) },
-    '/': function(a) { return car(a) / cadr(a) },
-    '=': function(a) { return car(a) == cadr(a) },
+    '+': function(a) { return endlessly(function(x,y) {return x + y}, a) },
+    '-': function(a) { return endlessly(function(x,y) {return x - y}, a) },
+    '*': function(a) { return endlessly(function(x,y) {return x * y}, a) },
+    '/': function(a) { return endlessly(function(x,y) {return x / y}, a) },
+    '=': function(a) { return car(a) == cadr(a) }, // make the rest smarter too
     '>': function(a) { return car(a) > cadr(a) },
     '<': function(a) { return car(a) < cadr(a) },
     '>=': function(a) { return car(a) >= cadr(a) },
@@ -501,6 +522,10 @@ function primitive_op(exp) {
 
 function error_procedure(proc) {
     return tagged_list(proc, 'error')
+}
+
+function explicit_apply_procedure(proc) {
+    return tagged_list(proc, 'apply');
 }
 
 function primitive_procedure(proc) {
@@ -695,11 +720,15 @@ var if_alternative = cadddr;
 function evaluates_to_true(x) { return x ? true : false }; 
 
 function quoted(exp) {
-    return exp[0][1] == 'quote';
+    return exp[0] == 'quoted-token' || exp[0][1] == 'quote';
 }
 
 function text_of_quotation(exp) {
-    return text_of_item(cdr(exp));
+    if (exp[0] == 'quoted-token') {
+	return exp[1]; // TODO: convert to Value?
+    } else {
+	return text_of_item(cdr(exp));
+    }
 }
 
 function text_of_item(exp) {
