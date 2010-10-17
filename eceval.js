@@ -263,14 +263,17 @@ function eceval_step() {
 	break;
     case 'apply-dispatch':
 	if (error_procedure(proc)) {
-	    val = argl.join(' ');
+	    val = scheme_to_js_style_array(argl).join(' ');
 	    branch = 'signal-error';
 	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
 	    try {
-		proc_call_stack.push(symbol_name(primitive_procedure_exp(proc)) 
-				     + '(primitive) called' 
-				     + code_source(primitive_procedure_exp(proc)));
+		proc_call_stack.push(
+		    '('
+			+ symbol_name(primitive_procedure_exp(proc)) + '[primitive]'
+			+ printable_argl(argl)
+			+ ') called' 
+			+ code_source(primitive_procedure_exp(proc)));
 
 		val = apply_primitive_procedure(proc, argl);
 		continue_to = restore();
@@ -291,11 +294,14 @@ function eceval_step() {
 	//  and where it was called from
 	if (proc.wrapped_value) {
 	    var calling_exp = proc.lookup_exp;
+	    // TODO: replace with richer data structure
 	    proc_call_stack.push(
-		(symbol(calling_exp) 
-		 ? symbol_name(calling_exp) 
-		 : "anonymous procedure")
-		    + " called " + code_source(calling_exp));
+		'(' + 
+		    (symbol(calling_exp) 
+		     ? symbol_name(calling_exp) 
+		     : "[anonymous]")
+		    + printable_argl(argl)
+		    + ") called " + code_source(calling_exp));
 	    proc = proc.value;
 	} else {
 	    proc_call_stack.push('computed procedure called');
@@ -434,7 +440,7 @@ function last(a) { return cdr(a).length == 0 }
 function list(a) { return a.length == 0 ? undefined : cons(car(a), list(cdr(a))); }
 // function list(a) { return a.slice(0) }
 
-function is_null(a) { return !a || a.length == 0 }
+function is_null(a) { return !car(a) || car(a).length == 0 }
 
 function and(a) { 
     if (a.length == 0) {
@@ -685,4 +691,15 @@ function adjoin_arg(arg, arglist) {
 // ---- functions analogous to mceval ----
 function compound_procedure(proc) {
     return tagged_list(proc, 'procedure');
+}
+
+// ---- debugger support ----
+function printable_argl(argl) {
+    return argl.length > 0 ? ' ' 
+    
+	+ $.map(scheme_to_js_style_array(argl), function(e,i) { 
+	    return compound_procedure(e) ? "[compound-procedure]" : stringify_scheme_exp(e);
+	}).join(' ')
+
+	: '';
 }

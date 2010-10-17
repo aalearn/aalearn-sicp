@@ -164,9 +164,11 @@ function ast_to_js_style_array(a) {
     return out;
 }
 
+// TODO: some confusion throughout about whether '() should be converted into js
+//  as [] or as undefined -- both used in various places
 function scheme_to_js_style_array(a) {
     var o = [];
-    while (a.length > 0) {
+    while (a && a.length > 0) {
 	o.push(a[0]);
 	a = a[1];
     }
