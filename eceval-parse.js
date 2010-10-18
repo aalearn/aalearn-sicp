@@ -220,7 +220,7 @@ function stringify_scheme_exp(exp, skip_parens) {
 	    $('<a class="non-code-source-info" />')
 		.attr('info', exp.source_exp)
 		.attr('id', info_id++)
-		.html(stringify_scheme_exp(exp.value))).html();
+		.html(stringify_scheme_exp(exp.value) + '')).html();
     } else if (!(exp instanceof Array)) {
 	return exp;
     } else {

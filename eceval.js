@@ -718,7 +718,7 @@ var if_consequent = caddr;
 var if_alternative = cadddr;
 
 // placeholder, in case we need to change this
-function evaluates_to_true(x) { return x ? true : false }; 
+function evaluates_to_true(x) { return x.value ? true : false }; 
 
 function quoted(exp) {
     return exp[0] == 'quoted-token' || exp[0][1] == 'quote';
@@ -726,7 +726,7 @@ function quoted(exp) {
 
 function text_of_quotation(exp) {
     if (exp[0] == 'quoted-token') {
-	return exp[1]; // TODO: convert to Value?
+	return exp[1];
     } else {
 	return text_of_item(cdr(exp));
     }
@@ -782,9 +782,11 @@ function wrap_self_evaluated(exp) {
 function wrap_apply_primitive_procedure(proc, argl, symbol_name) {
     return Value.init(
 	apply_primitive_procedure(proc, unwrap_values(argl)),
+	// [symbol_name + '[primitive]', argl]
 	'(' + symbol_name + '[primitive] ' + printable_argl(argl) + ')');
 }
 
 function wrap_text_of_quotation(exp) {
-    return Value.init(text_of_quotation(exp), 'quoted' + code_source(exp));
+    return Value.init(text_of_quotation(exp), 'quoted' 
+		      + (is_token(exp) ? code_source(exp) : code_source(car(exp))));
 }
