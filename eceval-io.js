@@ -55,8 +55,11 @@ $('a.code-source').live('click', function() {
 });
 
 $('a.non-code-source-info').live('click', function() {
-    var item = $('#' + $(this).attr('id')).parent();
-    $('<div class="output" />').html($(this).attr('info')).insertAfter(item);
+    if ($('#' + $(this).attr('id') + '-detail').length) {
+	$('#' + $(this).attr('id') + '-detail').remove();
+    } else {
+	$('#' + $(this).attr('id')).parent().append($('<div class="detail" id="' + $(this).attr('id') + '-detail"/>').html($(this).attr('info')));
+    }
 });
 
 // not used yet, but might help with flashing/highlighting a particular line 

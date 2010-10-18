@@ -69,6 +69,10 @@ body {
     float: left;
 }
 
+.detail {
+    clear: both;
+}
+
 .input {
     xbackground-color: #0A1824;
     float: left;
