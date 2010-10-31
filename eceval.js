@@ -270,11 +270,13 @@ function eceval_step() {
 	break;
     case 'apply-dispatch':
 	if (error_procedure(proc)) {
-	    val = scheme_to_js_style_array(argl).join(' ');
+	    val = scheme_to_js_style_array(scheme_map(stringify_scheme_exp, argl)).join(' ');
 	    branch = 'signal-error';
 	} else if (explicit_apply_procedure(proc)) {
 	    proc = car(argl);
-	    argl = cadr(argl);
+	    
+	    argl = scheme_map(function(e) { return Value.init(e, cadr(argl).source_exp) }, cadr(argl).value);
+	    console.log(argl);
 	    branch = 'apply-dispatch';	    
 	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
@@ -291,8 +293,8 @@ function eceval_step() {
 		branch = continue_to;
 		proc_call_stack.pop();
 	    } catch(err) {
-		val = 'applying primitive: ' + err;
-		branch = 'signal-error';
+	    	val = symbol_name(primitive_procedure_exp(proc)) + ': ' + err;
+	    	branch = 'signal-error';
 	    }
 	} else if (compound_procedure(proc.wrapped_value ? proc.value : proc)) {
 	    branch = 'compound-apply';
@@ -306,14 +308,23 @@ function eceval_step() {
 	if (proc.wrapped_value) {
 	    var calling_exp = proc.lookup_exp;
 	    // TODO: replace with richer data structure
-	    proc_call_stack.push(
-		'(' + 
-		    (symbol(calling_exp) 
-		     ? symbol_name(calling_exp) 
-		     : "[anonymous]")
-		    + printable_argl(argl)
-		    + ") called " + code_source(calling_exp));
-	    proc = proc.value;
+	    console.log(symbol_name(calling_exp));
+	    console.log(argl);
+	    dummy = argl;
+	    try {
+		proc_call_stack.push(
+		    '(' + 
+			(symbol(calling_exp) 
+			 ? symbol_name(calling_exp) 
+			 : "[anonymous]")
+			+ printable_argl(argl)
+			+ ") called " + code_source(calling_exp));
+		proc = proc.value;
+	    } catch(err) {
+		val = symbol_name(calling_exp) + ': ' + err;
+		branch = 'signal-error';
+		break;
+	    }
 	} else {
 	    proc_call_stack.push('computed procedure called');
 	}
@@ -561,7 +572,7 @@ function macro_expand(exp) {
 function let_assignments(a) { return cadr(a) };
 function let_body(a) { return cddr(a) }; // is car right?
 function scheme_map(f, a) {
-    if (car(a)) {
+    if (a && a.length) {
 	return [f(car(a)), scheme_map(f, cdr(a))];
     } else {
 	return [];
@@ -767,7 +778,6 @@ function unwrap_values(argl) {
 
 function printable_argl(argl) {
     return argl.length > 0 ? ' ' 
-    
 	+ $.map(scheme_to_js_style_array(unwrap_values(argl)), function(e,i) { 
 	    return compound_procedure(e) ? "[compound-procedure]" : stringify_scheme_exp(e);
 	}).join(' ')
