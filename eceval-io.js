@@ -50,15 +50,22 @@ $.fn.addBindings = function() {
 
 $('a.code-source').live('click', function() {
     var observed_line_height = $('#buffer-inner-frame')[0].scrollHeight / buffer_line_count();
-    $('#buffer-inner-frame').scrollTo((parseInt($(this).attr('num')) - 10 )* observed_line_height, 200, {axis:'y'});
+    var target_line = parseInt($(this).attr('num')) - 10;
+    if (target_line < 0) { target_line = 0 };
+
+    $('#buffer-inner-frame').scrollTo(target_line * observed_line_height, 200, {axis:'y'});
     return false;
 });
 
 $('a.non-code-source-info').live('click', function() {
-    if ($('#' + $(this).attr('id') + '-detail').length) {
-	$('#' + $(this).attr('id') + '-detail').remove();
+    var id = $(this).attr('id');
+    if ($('#' + id + '-detail').length) {
+	$('#' + id + '-detail').remove();
     } else {
-	$('#' + $(this).attr('id')).parent().append($('<div class="detail" id="' + $(this).attr('id') + '-detail"/>').html($(this).attr('info')));
+	$('#' + id).parent()
+	    .append(
+		$('<div class="detail" id="' + id + '-detail"/>')
+		    .html(html_stored_source_exp(parseInt(id))));
     }
 });
 

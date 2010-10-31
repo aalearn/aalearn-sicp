@@ -208,19 +208,44 @@ function stringify_abstract_syntax_tree(exp, skip_parens, count) {
     }
 }
 
+function reflective_html_exp(exp) {
+    // slightly spaghetti-ish
+    // this code relies on the Value class, which is in eceval.js
+    // also relies on jQuery for escaping
+    return $("<div />").html(
+	$('<a class="non-code-source-info" />')
+	    .attr('id', new_stored_source_exp(exp.source_exp))
+	    .html(stringify_scheme_exp(exp.value) + '')).html();
+}
+
 var info_id = 1;
+var stored_source_exps = {};
+function new_stored_source_exp(source_exp) {
+    info_id++;
+    stored_source_exps[info_id] = source_exp;
+    return info_id;
+}
+function html_stored_source_exp(id) {
+    var source = stored_source_exps[id];
+    if (source instanceof Array) {
+	var args = scheme_to_js_style_array(scheme_map(function(x) {
+	    if (x.source_exp) {
+		return reflective_html_exp(x);
+	    } else {
+		return x;
+	    }
+	}, source[1]));
+	return ('(' + source[0] + ' ' + args.join(' ') + ')');
+    } else {
+	return source;
+    }
+}
+
 function stringify_scheme_exp(exp, skip_parens) {
     if (exp == undefined) {
 	return 'nil';
     } else if (exp.wrapped_value) {
-	// slightly spaghetti-ish
-	// this code relies on the Value class, which is in eceval.js
-	// also relies on jQuery for escaping
-	return $("<div />").html(
-	    $('<a class="non-code-source-info" />')
-		.attr('info', exp.source_exp)
-		.attr('id', info_id++)
-		.html(stringify_scheme_exp(exp.value) + '')).html();
+	return reflective_html_exp(exp);
     } else if (!(exp instanceof Array)) {
 	return exp;
     } else {

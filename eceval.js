@@ -322,6 +322,7 @@ function eceval_step() {
 			 : "[anonymous]")
 			+ printable_argl(argl)
 			+ ") called " + code_source(calling_exp));
+
 		proc = proc.value;
 	    } catch(err) {
 		val = symbol_name(calling_exp) + ': ' + err;
@@ -372,6 +373,8 @@ function eceval_step() {
 	//  we want the proc_call_stack to still be complete
 	//  but once we're done evaluating that expression, we want to get rid of potentially
 	//  many entries in the proc_call_stack all at once.
+	// NOTE: is this too aggressive in cleaning up the stack?
+	//  seems to wipe it out in some cases, nonintuitive
 	proc_call_stack.pop();
 	continue_to = restore();
 	branch = continue_to;
@@ -795,8 +798,8 @@ function wrap_self_evaluated(exp) {
 function wrap_apply_primitive_procedure(proc, argl, symbol_name) {
     return Value.init(
 	apply_primitive_procedure(proc, unwrap_values(argl)),
-	// [symbol_name + '[primitive]', argl]
-	'(' + symbol_name + '[primitive] ' + printable_argl(argl) + ')');
+	[ symbol_name + '[primitive]', deep_copy(argl) ]);
+	// '(' + symbol_name + '[primitive] ' + printable_argl(argl) + ')');
 }
 
 function wrap_text_of_quotation(exp) {
