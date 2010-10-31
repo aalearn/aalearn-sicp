@@ -1,6 +1,9 @@
 // --- Stack ---
 // stored as a javascript array
 var stack = ['STACK'];
+function deep_copy(a) {
+    return $.extend(true, [], a);
+}
 function save(x) { 
     stack.push(x);
 }
@@ -81,7 +84,7 @@ function set_variable_value(variable, value, env, exp) {
 	    return;
 	}
     }
-    frame_data[variable] = Value.init(value, exp);
+    env[0].data[variable] = Value.init(value, exp);
 }
 
 function define_variable(variable, value, env, exp) {
@@ -109,6 +112,7 @@ function evaluate(ast) {
     branch = 'eval-dispatch';
     val = undefined;
     exp = ast;
+    env = [env[env.length - 1]]; // force env back to global-environment
     var count = 0;
     proc_call_stack = [];
     start_exp = undefined;
@@ -276,7 +280,6 @@ function eceval_step() {
 	    proc = car(argl);
 	    
 	    argl = scheme_map(function(e) { return Value.init(e, cadr(argl).source_exp) }, cadr(argl).value);
-	    console.log(argl);
 	    branch = 'apply-dispatch';	    
 	} else if (primitive_procedure(proc)) {
 	    // primitive-apply
@@ -308,8 +311,8 @@ function eceval_step() {
 	if (proc.wrapped_value) {
 	    var calling_exp = proc.lookup_exp;
 	    // TODO: replace with richer data structure
-	    console.log(symbol_name(calling_exp));
-	    console.log(argl);
+	    // console.log(symbol_name(calling_exp));
+	    // console.log(argl);
 	    dummy = argl;
 	    try {
 		proc_call_stack.push(
