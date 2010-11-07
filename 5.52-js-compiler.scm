@@ -236,7 +236,7 @@
           (car operand-codes)
           (make-instruction-sequence 
 	   '(val argl) '(argl)
-	   "argl = argl.unshift(val)"))))
+	   "argl.unshift(val)"))))
     (if (null? (cdr operand-codes))
         code-for-next-arg
         (preserving '(env)
@@ -298,7 +298,7 @@
 	     ;; TODO: need primitive support from eceval.js?
 	     ;; the current approach won't work for car/cdr, right?
 	     ;; TODO: fix eval cheat here
-	     (string-append (symbol->string target) " = eval([argl].join(proc))")))))))
+	     (string-append (symbol->string target) " = proc[1](argl)")))))))
        (label-header after-call)))))
 
 ;;;applying compiled procedures
@@ -427,9 +427,9 @@
                           (registers-needed seq1))
               (list-difference (registers-modified seq1)
                                (list first-reg))
-              (string-append "save(" first-reg ");\n"
+              (string-append "save(" (symbol->string first-reg) ");\n"
 			     (statements seq1)
-			     "restore(" first-reg ");\n"))
+			     (symbol->string first-reg) " = restore();\n"))
              seq2)
             (preserving (cdr regs) seq1 seq2)))))
 

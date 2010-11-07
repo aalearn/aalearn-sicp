@@ -9,12 +9,18 @@ function announce_output(out) {
 // note: not the same as eceval.js versions, using js-native style arrays everywhere
 function car(a) { return a[0] }
 function cdr(a) { return a.slice(1) }
-function sum(a) {
-    return a.length ? a[0] + sum(cdr(a)) : 0;
-}
+
+function sum(a) { return a.length ? a[0] + sum(cdr(a)) : 0; }
+function product(a) { return a.length ? a[0] * product(cdr(a)) : 1 }
+function difference(a) { return a[0] - a[1] }
+function dividend(a) { return a[0] / a[1] }
+
 function lookup_primitive_op(variable) {
     return { 
-	'+': sum
+	'+': sum,
+	'*': product,
+	'-': difference,
+	'/': dividend,
     }[variable];
 }
 function get_primitive_procedure(variable) {
@@ -24,7 +30,12 @@ function primitive_procedure(p) {
     return (p instanceof Array) && p[0] == 'primitive';
 }
 
-// --- Environment and data storage (eceval.js) ---
+
+// --- Stack, Environment and data storage (eceval.js) ---
+var stack = ['STACK'];
+function save(x) { stack.push(x) };
+function restore() { return stack.pop() };
+
 var Frame = {
     init: function(variables, values, code_source, code_symbol) {
 	var newObject = Object.create(this);
@@ -48,7 +59,7 @@ var Frame = {
 var env = [Frame.init([],[],' at top-level')];
 var unbound_variable_error = ['error', 'unbound_variable'];
 
-// variable support
+// variables
 function lookup_variable_value(variable, env, lookup_exp, include_context) {
     for (i = 0, len = env.length; i < len; i++) {
 	frame_data = env[i].data;
@@ -80,7 +91,7 @@ function set_variable_value(variable, value, env, exp) {
 }
 
 
-// machine loop
+// --- Machine loop ---
 var exp;
 var unev;
 
@@ -94,9 +105,9 @@ function machine_loop() {
     branch = 'main';
     var count = 0;
     while(branch !== 'done') {
+	// console.log(branch);
 	step();
-	console.log(branch);
-	if (count++ > 199) {
+	if (count++ > 12399) {
 	    branch = 'done';
 	    console.log('infinite loop guard');
 	}
