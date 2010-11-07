@@ -308,29 +308,28 @@ function eceval_step() {
     case 'compound-apply':
 	// currently this has access to both where/how a function was defined
 	//  and where it was called from
+	var stack_proc_name = '';
+	var stack_proc_code_source = '';
 	if (proc.wrapped_value) {
 	    var calling_exp = proc.lookup_exp;
-	    // TODO: replace with richer data structure
-	    // console.log(symbol_name(calling_exp));
-	    // console.log(argl);
-	    dummy = argl;
-	    try {
-		proc_call_stack.push(
-		    '(' + 
-			(symbol(calling_exp) 
-			 ? symbol_name(calling_exp) 
-			 : "[anonymous]")
-			+ printable_argl(argl)
-			+ ") called " + code_source(calling_exp));
-
-		proc = proc.value;
-	    } catch(err) {
-		val = symbol_name(calling_exp) + ': ' + err;
-		branch = 'signal-error';
-		break;
-	    }
+	    stack_proc_name = symbol(calling_exp) ? symbol_name(calling_exp) : '[anonymous]';
+	    code_source = code_source
+	    proc = proc.value;
 	} else {
-	    proc_call_stack.push('computed procedure called');
+	    stack_proc_name = '[computed]';
+	}
+	// TODO: replace with richer data structure
+	// console.log(symbol_name(calling_exp));
+	// console.log(argl);
+	try {
+	    proc_call_stack.push(
+		'(' + stack_proc_name
+		    + printable_argl(argl)
+		    + ") called " + stack_proc_code_source);
+	} catch(err) {
+	    val = symbol_name(calling_exp) + ': ' + err;
+	    branch = 'signal-error';
+	    break;
 	}
 
 	// TODO: trap wrong arity
