@@ -49,7 +49,7 @@
   (list needs modifies statements))
 
 (define (empty-instruction-sequence)
-  (make-instruction-sequence '() '() '()))
+  (make-instruction-sequence '() '() ""))
 
 
 ;;;SECTION 5.5.2
@@ -58,39 +58,43 @@
 
 (define (compile-linkage linkage)
   (cond ((eq? linkage 'return)
-         (make-instruction-sequence '(continue) '()
-          '((goto (reg continue)))))
+         (make-instruction-sequence '(continue_to) '() "branch = continue_to"))
         ((eq? linkage 'next)
          (empty-instruction-sequence))
         (else
-         (make-instruction-sequence '() '()
-          `((goto (label ,linkage)))))))
+         (make-instruction-sequence 
+	  '() '()
+	  (string-append "branch = '" linkage "'"))))) 
 
 (define (end-with-linkage linkage instruction-sequence)
-  (preserving '(continue)
+  (preserving '(continue_to)
    instruction-sequence
    (compile-linkage linkage)))
 
 
 ;;;simple expressions
+(define (x->string e) 
+  (cond ((number? e) (number->string e))
+	((symbol? e) (symbol->string e))
+	(else e)))
 
 (define (compile-self-evaluating exp target linkage)
   (end-with-linkage linkage
-   (make-instruction-sequence '() (list target)
-    `((assign ,target (const ,exp))))))
+   (make-instruction-sequence 
+    '() (list target)
+    (string-append (symbol->string target) " = " (x->string exp)))))
 
 (define (compile-quoted exp target linkage)
   (end-with-linkage linkage
-   (make-instruction-sequence '() (list target)
-    `((assign ,target (const ,(text-of-quotation exp)))))))
+   (make-instruction-sequence 
+    '() (list target)
+    (string-append (symbol->string target) " = " (text-of-quotation exp)))))
 
 (define (compile-variable exp target linkage)
   (end-with-linkage linkage
-   (make-instruction-sequence '(env) (list target)
-    `((assign ,target
-              (op lookup-variable-value)
-              (const ,exp)
-              (reg env))))))
+   (make-instruction-sequence 
+    '(env) (list target)
+    (string-append (symbol->string target) " = lookup_variable_value('" (x->string exp) "', env)"))))
 
 (define (compile-assignment exp target linkage)
   (let ((var (assignment-variable exp))
@@ -99,12 +103,9 @@
     (end-with-linkage linkage
      (preserving '(env)
       get-value-code
-      (make-instruction-sequence '(env val) (list target)
-       `((perform (op set-variable-value!)
-                  (const ,var)
-                  (reg val)
-                  (reg env))
-         (assign ,target (const ok))))))))
+      (make-instruction-sequence 
+       '(env val) (list target)
+       (string-append "set_variable_value(" (x->string var) ", val, env"))))))
 
 (define (compile-definition exp target linkage)
   (let ((var (definition-variable exp))
@@ -113,12 +114,10 @@
     (end-with-linkage linkage
      (preserving '(env)
       get-value-code
-      (make-instruction-sequence '(env val) (list target)
-       `((perform (op define-variable!)
-                  (const ,var)
-                  (reg val)
-                  (reg env))
-         (assign ,target (const ok))))))))
+      (make-instruction-sequence 
+       '(env val) (list target)
+       (string-append "define_variable(" var ", val, env);\n"
+		      target " = 'ok: " var " set';\n"))))))
 
 
 ;;;conditional expressions
@@ -131,9 +130,8 @@
   label-counter)
 
 (define (make-label name)
-  (string->symbol
-    (string-append (symbol->string name)
-                   (number->string (new-label-number)))))
+  (string-append (symbol->string name)
+		 (number->string (new-label-number))))
 ;; end of footnote
 
 (define (compile-if exp target linkage)
@@ -148,12 +146,14 @@
               (if-consequent exp) target consequent-linkage))
             (a-code
              (compile (if-alternative exp) target linkage)))
-        (preserving '(env continue)
+        (preserving '(env continue_to)
          p-code
          (append-instruction-sequences
-          (make-instruction-sequence '(val) '()
-           `((test (op false?) (reg val))
-             (branch (label ,f-branch))))
+          (make-instruction-sequence 
+	   '(val) '()
+	   ; note: in the original, we "fell through" automatically to the t-branch
+	   ; this is possible, but messier in js, so we just make that an extra "step"
+	   (string-append "branch = val ? '" t-branch "' : '" f-branch "'"))
           (parallel-instruction-sequences
            (append-instruction-sequences t-branch c-code)
            (append-instruction-sequences f-branch a-code))
@@ -164,7 +164,7 @@
 (define (compile-sequence seq target linkage)
   (if (last-exp? seq)
       (compile (first-exp seq) target linkage)
-      (preserving '(env continue)
+      (preserving '(env continue_to)
        (compile (first-exp seq) target 'next)
        (compile-sequence (rest-exps seq) target linkage))))
 
@@ -178,25 +178,23 @@
       (append-instruction-sequences
        (tack-on-instruction-sequence
         (end-with-linkage lambda-linkage
-         (make-instruction-sequence '(env) (list target)
-          `((assign ,target
-                    (op make-compiled-procedure)
-                    (label ,proc-entry)
-                    (reg env)))))
+         (make-instruction-sequence 
+	  '(env) (list target)
+	  ;; TODO: this one can't possibly work as of yet
+	  ;; what is make_compiled_procedure going to do?
+	  (string-append target " = make_compiled_procedure('" proc-entry "', env)")))
         (compile-lambda-body exp proc-entry))
        after-lambda))))
 
 (define (compile-lambda-body exp proc-entry)
   (let ((formals (lambda-parameters exp)))
     (append-instruction-sequences
-     (make-instruction-sequence '(env proc argl) '(env)
-      `(,proc-entry
-        (assign env (op compiled-procedure-env) (reg proc))
-        (assign env
-                (op extend-environment)
-                (const ,formals)
-                (reg argl)
-                (reg env))))
+     (make-instruction-sequence 
+      '(env proc argl) '(env)
+      (string-append (label-header proc-entry)
+		     "env = compiled_procedure_env(proc);\n"
+		     ;; TODO: need to convert formals in next line, fix call to extend_env
+		     "env = extend_environment(" formals ", argl, env);\n"))
      (compile-sequence (lambda-body exp) 'val 'return))))
 
 
@@ -209,22 +207,22 @@
         (operand-codes
          (map (lambda (operand) (compile operand 'val 'next))
               (operands exp))))
-    (preserving '(env continue)
+    (preserving '(env continue_to)
      proc-code
-     (preserving '(proc continue)
+     (preserving '(proc continue_to)
       (construct-arglist operand-codes)
       (compile-procedure-call target linkage)))))
 
 (define (construct-arglist operand-codes)
   (let ((operand-codes (reverse operand-codes)))
     (if (null? operand-codes)
-        (make-instruction-sequence '() '(argl)
-         '((assign argl (const ()))))
+        (make-instruction-sequence '() '(argl) "argl = []")
         (let ((code-to-get-last-arg
                (append-instruction-sequences
                 (car operand-codes)
-                (make-instruction-sequence '(val) '(argl)
-                 '((assign argl (op list) (reg val)))))))
+                (make-instruction-sequence 
+		 '(val) '(argl)
+		 (string-append "argl = list(val)")))))
           (if (null? (cdr operand-codes))
               code-to-get-last-arg
               (preserving '(env)
@@ -236,9 +234,9 @@
   (let ((code-for-next-arg
          (preserving '(argl)
           (car operand-codes)
-          (make-instruction-sequence '(val argl) '(argl)
-           '((assign argl
-              (op cons) (reg val) (reg argl)))))))
+          (make-instruction-sequence 
+	   '(val argl) '(argl)
+	   "argl = argl.shift(val)"))))
     (if (null? (cdr operand-codes))
         code-for-next-arg
         (preserving '(env)
@@ -246,6 +244,9 @@
          (code-to-get-rest-args (cdr operand-codes))))))
 
 ;;;applying procedures
+(define (label-header label)
+  ;; TODO: move break to a less hacky place
+  (string-append "break;\ncase '" label "':\n"))
 
 ; modified heavily
 (define (compile-procedure-call target linkage)
@@ -259,66 +260,70 @@
            (if (eq? linkage 'next) after-call linkage)))
       (append-instruction-sequences
        (append-instruction-sequences
-	compile-procedure-call-start
-	(make-instruction-sequence '(proc) '()
-         `((test (op primitive-procedure?) (reg proc))
-           (branch (label ,primitive-branch))
-	   (test (op compound-procedure?) (reg proc))
-	   (branch (label ,interpreted-branch))
-	   (test (op explicit-apply?) (reg proc))
-	   (branch (label ,explicit-apply-branch))
-	   )))
+	(label-header compile-procedure-call-start)
+	(make-instruction-sequence 
+	 '(proc) '()
+	 (string-append "if (primitive_op(proc)) {\n"
+			"  branch = '" primitive-branch "';\n"
+			"} else if (compound_procedure(proc)) {\n"
+			"  branch = '" interpreted-branch "';\n"
+			"} else if (explicit_apply_procedure(proc)) {\n"
+			"  branch = '" explicit-apply-branch "';\n"
+			"}\n")))
        (parallel-instruction-sequences
 	(append-instruction-sequences
-	 compiled-branch
+	 (label-header compiled-branch)
 	 (compile-proc-appl target compiled-linkage))
 	(parallel-instruction-sequences
 	 (append-instruction-sequences
 	  interpreted-branch
 	  (interpreted-proc-appl target compiled-linkage))
 	 (parallel-instruction-sequences
-	  (append-instruction-sequences                         ; code added to make (apply ...) work
-	   explicit-apply-branch                                ; inefficient, since this must be added
-	   (make-instruction-sequence '(proc argl) '(proc argl) ; for every procedure call!
-            `((assign proc (op explicit-apply-proc) (reg argl))
-	      (assign argl (op explicit-apply-args) (reg argl))
-	      (goto (label ,compile-procedure-call-start)))))
+	  ; code added just to check in real time whether
+	  ; this is an explicit (apply ...) -- quite inefficient!
+	  (append-instruction-sequences                         
+	   (label-header explicit-apply-branch)
+	   (make-instruction-sequence                           
+	    '(proc argl) '(proc argl)
+	    (string-append "proc = explicit_apply_procedure(proc);\n"
+			   "// argl? = explicit-apply-args argl;\n"
+			   "branch = " compile-procedure-call-start)))
 	  (append-instruction-sequences
-	   primitive-branch
+	   (label-header primitive-branch)
 	   (end-with-linkage linkage
-            (make-instruction-sequence '(proc argl)
-                                        (list target)
-             `((assign ,target
-                       (op apply-primitive-procedure)
-                       (reg proc)
-                       (reg argl)))))))))
+            (make-instruction-sequence 
+	     '(proc argl) (list target)
+	     ;; TODO: need primitive support from eceval.js?
+	     ;; the current approach won't work for car/cdr, right?
+	     ;; TODO: fix eval cheat here
+	     (string-append (symbol->string target) " = eval([argl].join(proc))")))))))
        after-call))))
 
 ;;;applying compiled procedures
 
 (define (compile-proc-appl target linkage)
   (cond ((and (eq? target 'val) (not (eq? linkage 'return)))
-         (make-instruction-sequence '(proc) all-regs
-           `((assign continue (label ,linkage))
-             (assign val (op compiled-procedure-entry)
-                         (reg proc))
-             (goto (reg val)))))
+         (make-instruction-sequence 
+	  '(proc) all-regs
+	  (string-append "continue_to = '" (x->string linkage) "';\n"
+			 "val = compiled_procedure_entry(proc);\n"
+			 "branch = val;\n")))
         ((and (not (eq? target 'val))
               (not (eq? linkage 'return)))
          (let ((proc-return (make-label 'proc-return)))
-           (make-instruction-sequence '(proc) all-regs
-            `((assign continue (label ,proc-return))
-              (assign val (op compiled-procedure-entry)
-                          (reg proc))
-              (goto (reg val))
-              ,proc-return
-              (assign ,target (reg val))
-              (goto (label ,linkage))))))
+           (make-instruction-sequence 
+	    '(proc) all-regs
+	    (string-append "continue_to = '" proc-return "';\n"
+			   "val = compiled_procedure_entry(proc);\n"
+			   "branch = val;\n"
+			   (label-handler proc-return)
+			   (symbol->string target) " = val;\n"
+			   "branch = '" (symbol->string linkage) "';\n"))))
         ((and (eq? target 'val) (eq? linkage 'return))
-         (make-instruction-sequence '(proc continue) all-regs
-          '((assign val (op compiled-procedure-entry)
-                        (reg proc))
-            (goto (reg val)))))
+         (make-instruction-sequence 
+	  '(proc continue_to) all-regs
+	  (string-append "val = compiled_procedure_entry(proc);\n"
+			 "branch = val;\n")))
         ((and (not (eq? target 'val)) (eq? linkage 'return))
          (error "return linkage, target not val -- COMPILE"
                 target))))
@@ -326,42 +331,45 @@
 ;;;applying interpreted procedures
 (define (interpreted-proc-appl target linkage)
   (cond ((and (eq? target 'val) (not (eq? linkage 'return)))
-         (make-instruction-sequence '(proc) all-regs
-           `((assign continue (label ,linkage))
-	     (save continue) ; why?
-	     (goto (reg compapp)))))
+         (make-instruction-sequence 
+	  '(proc) all-regs
+	  (string-append "continue_to = '" linkage "';\n"
+			 "save(continue_to);\n" ; why?
+			 "branch = compapp;\n")))
         ((and (not (eq? target 'val))
               (not (eq? linkage 'return)))
          (let ((proc-return (make-label 'proc-return)))
-           (make-instruction-sequence '(proc) all-regs
-            `((assign continue (label ,proc-return))
-	      (save continue) ; why?
-	      (goto (reg compapp))
-              ,proc-return
-              (assign ,target (reg val))
-              (goto (label ,linkage))))))
+           (make-instruction-sequence 
+	    '(proc) all-regs
+	    (string-append "continue_to = '" proc-return "';\n"
+			   "save(continue_to);\n" ; why?
+			   "branch = compapp;\n"
+			   (label-header proc-return)
+			   target " = val;\n"
+			   "branch = '" linkage "';\n"))))
         ((and (eq? target 'val) (eq? linkage 'return))
-	 (make-instruction-sequence '(proc continue) all-regs
-	   `((save continue) ; why?
-	     (goto (reg compapp)))))
+	 (make-instruction-sequence 
+	  '(proc continue_to) all-regs
+	  (string-append "save(continue_to);\n" ; why?
+			 "branch = compapp;\n")))
         ((and (not (eq? target 'val)) (eq? linkage 'return))
          (error "return linkage, target not val -- COMPILE"
                 target))))
 
 ;; footnote
-(define all-regs '(env proc val argl continue))
+(define all-regs '(env proc val argl continue_to))
 
 
 ;;;SECTION 5.5.4
 
 (define (registers-needed s)
-  (if (symbol? s) '() (car s)))
+  (if (string? s) '() (car s)))
 
 (define (registers-modified s)
-  (if (symbol? s) '() (cadr s)))
+  (if (string? s) '() (cadr s)))
 
 (define (statements s)
-  (if (symbol? s) (list s) (caddr s)))
+  (if (string? s) s (caddr s)))
 
 (define (needs-register? seq reg)
   (memq reg (registers-needed seq)))
@@ -378,7 +386,7 @@
                                   (registers-modified seq1)))
      (list-union (registers-modified seq1)
                  (registers-modified seq2))
-     (append (statements seq1) (statements seq2))))
+     (string-append (statements seq1) ";\n" (statements seq2))))
   (define (append-seq-list seqs)
     (if (null? seqs)
         (empty-instruction-sequence)
@@ -409,9 +417,9 @@
                           (registers-needed seq1))
               (list-difference (registers-modified seq1)
                                (list first-reg))
-              (append `((save ,first-reg))
-                      (statements seq1)
-                      `((restore ,first-reg))))
+              (string-append "save(" first-reg ");\n"
+			     (statements seq1)
+			     "restore(" first-reg ");\n"))
              seq2)
             (preserving (cdr regs) seq1 seq2)))))
 
@@ -427,6 +435,6 @@
                (registers-needed seq2))
    (list-union (registers-modified seq1)
                (registers-modified seq2))
-   (append (statements seq1) (statements seq2))))
+   (string-append (statements seq1) ";\n" (statements seq2))))
 
 '(COMPILER LOADED)
