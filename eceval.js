@@ -326,7 +326,7 @@ function eceval_step() {
 		'(' + stack_proc_name
 		    + printable_argl(argl)
 		    + ") called " + stack_proc_code_source);
-	    proc = proc.value; // accident
+	    proc = proc.value; // unclear about this line
 	} catch(err) {
 	    val = symbol_name(calling_exp) + ': ' + err;
 	    branch = 'signal-error';
@@ -422,6 +422,7 @@ function eceval_step() {
 	// code-source details for better stacktraces
 	unev = exp;
 	save(unev);
+
 	exp = definition_value(exp);
 	save(env);
 	save(continue_to);

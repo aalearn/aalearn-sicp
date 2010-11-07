@@ -58,13 +58,13 @@
 
 (define (compile-linkage linkage)
   (cond ((eq? linkage 'return)
-         (make-instruction-sequence '(continue_to) '() "branch = continue_to"))
+         (make-instruction-sequence '(continue_to) '() "branch = continue_to;\nbreak"))
         ((eq? linkage 'next)
          (empty-instruction-sequence))
         (else
          (make-instruction-sequence 
 	  '() '()
-	  (string-append "branch = '" linkage "'"))))) 
+	  (string-append "branch = '" linkage "';\nbreak"))))) 
 
 (define (end-with-linkage linkage instruction-sequence)
   (preserving '(continue_to)
@@ -153,7 +153,7 @@
 	   '(val) '()
 	   ; note: in the original, we "fell through" automatically to the t-branch
 	   ; this is possible, but messier in js, so we just make that an extra "step"
-	   (string-append "branch = val ? '" t-branch "' : '" f-branch "'"))
+	   (string-append "branch = val ? '" t-branch "' : '" f-branch "';\nbreak"))
           (parallel-instruction-sequences
            (append-instruction-sequences t-branch c-code)
            (append-instruction-sequences f-branch a-code))
@@ -222,7 +222,7 @@
                 (car operand-codes)
                 (make-instruction-sequence 
 		 '(val) '(argl)
-		 (string-append "argl = list(val)")))))
+		 (string-append "argl = [val]")))))
           (if (null? (cdr operand-codes))
               code-to-get-last-arg
               (preserving '(env)
@@ -236,7 +236,7 @@
           (car operand-codes)
           (make-instruction-sequence 
 	   '(val argl) '(argl)
-	   "argl = argl.shift(val)"))))
+	   "argl = argl.unshift(val)"))))
     (if (null? (cdr operand-codes))
         code-for-next-arg
         (preserving '(env)
@@ -246,7 +246,7 @@
 ;;;applying procedures
 (define (label-header label)
   ;; TODO: move break to a less hacky place
-  (string-append "break;\ncase '" label "':\n"))
+  (string-append "case '" label "':\n"))
 
 ; modified heavily
 (define (compile-procedure-call target linkage)
@@ -263,20 +263,21 @@
 	(label-header compile-procedure-call-start)
 	(make-instruction-sequence 
 	 '(proc) '()
-	 (string-append "if (primitive_op(proc)) {\n"
+	 (string-append "if (primitive_procedure(proc)) {\n"
 			"  branch = '" primitive-branch "';\n"
 			"} else if (compound_procedure(proc)) {\n"
 			"  branch = '" interpreted-branch "';\n"
 			"} else if (explicit_apply_procedure(proc)) {\n"
 			"  branch = '" explicit-apply-branch "';\n"
-			"}\n")))
+			"}\n"
+			"break")))
        (parallel-instruction-sequences
 	(append-instruction-sequences
 	 (label-header compiled-branch)
 	 (compile-proc-appl target compiled-linkage))
 	(parallel-instruction-sequences
 	 (append-instruction-sequences
-	  interpreted-branch
+	  (label-header interpreted-branch)
 	  (interpreted-proc-appl target compiled-linkage))
 	 (parallel-instruction-sequences
 	  ; code added just to check in real time whether
@@ -287,7 +288,8 @@
 	    '(proc argl) '(proc argl)
 	    (string-append "proc = explicit_apply_procedure(proc);\n"
 			   "// argl? = explicit-apply-args argl;\n"
-			   "branch = " compile-procedure-call-start)))
+			   "branch = " compile-procedure-call-start "l\;\n"
+			   "break")))
 	  (append-instruction-sequences
 	   (label-header primitive-branch)
 	   (end-with-linkage linkage
@@ -297,7 +299,7 @@
 	     ;; the current approach won't work for car/cdr, right?
 	     ;; TODO: fix eval cheat here
 	     (string-append (symbol->string target) " = eval([argl].join(proc))")))))))
-       after-call))))
+       (label-header after-call)))))
 
 ;;;applying compiled procedures
 
@@ -307,7 +309,8 @@
 	  '(proc) all-regs
 	  (string-append "continue_to = '" (x->string linkage) "';\n"
 			 "val = compiled_procedure_entry(proc);\n"
-			 "branch = val;\n")))
+			 "branch = val;\n"
+			 "break")))
         ((and (not (eq? target 'val))
               (not (eq? linkage 'return)))
          (let ((proc-return (make-label 'proc-return)))
@@ -316,14 +319,17 @@
 	    (string-append "continue_to = '" proc-return "';\n"
 			   "val = compiled_procedure_entry(proc);\n"
 			   "branch = val;\n"
+			   "break;\n"
 			   (label-handler proc-return)
 			   (symbol->string target) " = val;\n"
-			   "branch = '" (symbol->string linkage) "';\n"))))
+			   "branch = '" (symbol->string linkage) "';\n"
+			   "break"))))
         ((and (eq? target 'val) (eq? linkage 'return))
          (make-instruction-sequence 
 	  '(proc continue_to) all-regs
 	  (string-append "val = compiled_procedure_entry(proc);\n"
-			 "branch = val;\n")))
+			 "branch = val;\n"
+			 "break")))
         ((and (not (eq? target 'val)) (eq? linkage 'return))
          (error "return linkage, target not val -- COMPILE"
                 target))))
@@ -335,7 +341,8 @@
 	  '(proc) all-regs
 	  (string-append "continue_to = '" linkage "';\n"
 			 "save(continue_to);\n" ; why?
-			 "branch = compapp;\n")))
+			 "branch = compapp;\n"
+			 "break")))
         ((and (not (eq? target 'val))
               (not (eq? linkage 'return)))
          (let ((proc-return (make-label 'proc-return)))
@@ -344,14 +351,17 @@
 	    (string-append "continue_to = '" proc-return "';\n"
 			   "save(continue_to);\n" ; why?
 			   "branch = compapp;\n"
+			   "break;\n"
 			   (label-header proc-return)
 			   target " = val;\n"
-			   "branch = '" linkage "';\n"))))
+			   "branch = '" linkage "';\n"
+			   "break"))))
         ((and (eq? target 'val) (eq? linkage 'return))
 	 (make-instruction-sequence 
 	  '(proc continue_to) all-regs
 	  (string-append "save(continue_to);\n" ; why?
-			 "branch = compapp;\n")))
+			 "branch = compapp;\n"
+			 "break")))
         ((and (not (eq? target 'val)) (eq? linkage 'return))
          (error "return linkage, target not val -- COMPILE"
                 target))))
@@ -437,4 +447,19 @@
                (registers-modified seq2))
    (string-append (statements seq1) ";\n" (statements seq2))))
 
+
+;; Tools for working conveniently with compiler
+(define (compile-with-wrapper exp)
+  (string-append "function step() {\n"
+		 "switch (branch) {\n"
+		 "case 'main':\n\n"
+		 (caddr (compile exp 'val 'next))
+		 "\n\nbranch = 'done';\n"
+		 "} }\n"))
+
+(define (compile-to-file exp)
+  (with-output-to-file "compiled.js"
+    (lambda ()
+      (write-string (compile-with-wrapper exp)))))
+      
 '(COMPILER LOADED)
