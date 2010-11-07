@@ -326,6 +326,7 @@ function eceval_step() {
 		'(' + stack_proc_name
 		    + printable_argl(argl)
 		    + ") called " + stack_proc_code_source);
+	    proc = proc.value; // accident
 	} catch(err) {
 	    val = symbol_name(calling_exp) + ': ' + err;
 	    branch = 'signal-error';
