@@ -116,8 +116,8 @@
       get-value-code
       (make-instruction-sequence 
        '(env val) (list target)
-       (string-append "define_variable(" var ", val, env);\n"
-		      target " = 'ok: " var " set';\n"))))))
+       (string-append "define_variable('" (symbol->string var) "', val, env);\n"
+		      (symbol->string target) " = 'ok: " (symbol->string var) " set';\n"))))))
 
 
 ;;;conditional expressions
@@ -180,12 +180,18 @@
         (end-with-linkage lambda-linkage
          (make-instruction-sequence 
 	  '(env) (list target)
-	  ;; TODO: this one can't possibly work as of yet
-	  ;; what is make_compiled_procedure going to do?
-	  (string-append target " = make_compiled_procedure('" proc-entry "', env)")))
+	  (string-append (symbol->string target) " = make_compiled_procedure('" proc-entry "', env)")))
         (compile-lambda-body exp proc-entry))
-       after-lambda))))
+       (label-header after-lambda)))))
 
+
+(define (scheme-list->js a)
+  (define (string-join items delimiter)
+    (cond ((null? items) "")
+	  ((null? (cdr items)) (car items))
+	  (else (string-append (car items) delimiter (string-join (cdr items))))))
+  (string-join (map (lambda (x) (string-append "'" (x->string x) "'")) a) ","))
+			
 (define (compile-lambda-body exp proc-entry)
   (let ((formals (lambda-parameters exp)))
     (append-instruction-sequences
@@ -194,7 +200,7 @@
       (string-append (label-header proc-entry)
 		     "env = compiled_procedure_env(proc);\n"
 		     ;; TODO: need to convert formals in next line, fix call to extend_env
-		     "env = extend_environment(" formals ", argl, env);\n"))
+		     "env = extend_environment(" (scheme-list->js formals) ", argl, env);\n"))
      (compile-sequence (lambda-body exp) 'val 'return))))
 
 
@@ -264,13 +270,13 @@
 	(make-instruction-sequence 
 	 '(proc) '()
 	 (string-append "if (primitive_procedure(proc)) {\n"
-			"  branch = '" primitive-branch "';\n"
+			"  branch = '" primitive-branch "';\n  break;\n"
 			"} else if (compound_procedure(proc)) {\n"
-			"  branch = '" interpreted-branch "';\n"
+			"  branch = '" interpreted-branch "';\n  break;\n"
+			;; TODO: explicit_apply does not yet work -- see argl? below as well
 			"} else if (explicit_apply_procedure(proc)) {\n"
-			"  branch = '" explicit-apply-branch "';\n"
-			"}\n"
-			"break")))
+			"  branch = '" explicit-apply-branch "';\n  break;\n"
+			"}\n")))
        (parallel-instruction-sequences
 	(append-instruction-sequences
 	 (label-header compiled-branch)
@@ -437,7 +443,7 @@
   (make-instruction-sequence
    (registers-needed seq)
    (registers-modified seq)
-   (append (statements seq) (statements body-seq))))
+   (string-append (statements seq) ";\n" (statements body-seq))))
 
 (define (parallel-instruction-sequences seq1 seq2)
   (make-instruction-sequence
