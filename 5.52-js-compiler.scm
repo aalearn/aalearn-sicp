@@ -58,13 +58,13 @@
 
 (define (compile-linkage linkage)
   (cond ((eq? linkage 'return)
-         (make-instruction-sequence '(continue_to) '() "branch = continue_to;\nbreak"))
+         (make-instruction-sequence '(continue_to) '() (code-line "branch = continue_to;\nbreak")))
         ((eq? linkage 'next)
          (empty-instruction-sequence))
         (else
          (make-instruction-sequence 
 	  '() '()
-	  (string-append "branch = '" linkage "';\nbreak"))))) 
+	  (code-line "branch = '" (x->string linkage) "';\n  break")))))
 
 (define (end-with-linkage linkage instruction-sequence)
   (preserving '(continue_to)
@@ -82,19 +82,20 @@
   (end-with-linkage linkage
    (make-instruction-sequence 
     '() (list target)
-    (string-append (symbol->string target) " = " (x->string exp)))))
+    (code-line (symbol->string target) " = " (x->string exp)))))
 
 (define (compile-quoted exp target linkage)
   (end-with-linkage linkage
    (make-instruction-sequence 
     '() (list target)
-    (string-append (symbol->string target) " = " (text-of-quotation exp)))))
+    (code-line (symbol->string target) " = " (text-of-quotation exp)))))
 
 (define (compile-variable exp target linkage)
   (end-with-linkage linkage
    (make-instruction-sequence 
     '(env) (list target)
-    (string-append (symbol->string target) " = lookup_variable_value('" (x->string exp) "', env)"))))
+    ;; TODO: check if variable is unbound?
+    (code-line (symbol->string target) " = lookup_variable_value('" (x->string exp) "', env)"))))
 
 (define (compile-assignment exp target linkage)
   (let ((var (assignment-variable exp))
@@ -105,7 +106,7 @@
       get-value-code
       (make-instruction-sequence 
        '(env val) (list target)
-       (string-append "set_variable_value(" (x->string var) ", val, env"))))))
+       (code-line "set_variable_value(" (x->string var) ", val, env)"))))))
 
 (define (compile-definition exp target linkage)
   (let ((var (definition-variable exp))
@@ -116,8 +117,8 @@
       get-value-code
       (make-instruction-sequence 
        '(env val) (list target)
-       (string-append "define_variable('" (symbol->string var) "', val, env);\n"
-		      (symbol->string target) " = 'ok: " (symbol->string var) " set';\n"))))))
+       (code-line "define_variable('" (symbol->string var) "', val, env);\n"
+		      "  " (symbol->string target) " = 'ok: " (symbol->string var) " set'"))))))
 
 
 ;;;conditional expressions
@@ -153,11 +154,11 @@
 	   '(val) '()
 	   ; note: in the original, we "fell through" automatically to the t-branch
 	   ; this is possible, but messier in js, so we just make that an extra "step"
-	   (string-append "branch = val ? '" t-branch "' : '" f-branch "';\nbreak"))
+	   (code-line "branch = val ? '" t-branch "' : '" f-branch "';\n  break"))
           (parallel-instruction-sequences
-           (append-instruction-sequences t-branch c-code)
-           (append-instruction-sequences f-branch a-code))
-          after-if))))))
+           (append-instruction-sequences (label-header t-branch) c-code)
+           (append-instruction-sequences (label-header f-branch) a-code))
+          (label-header after-if)))))))
 
 ;;; sequences
 
@@ -180,7 +181,7 @@
         (end-with-linkage lambda-linkage
          (make-instruction-sequence 
 	  '(env) (list target)
-	  (string-append (symbol->string target) " = make_compiled_procedure('" proc-entry "', env)")))
+	  (code-line (symbol->string target) " = make_compiled_procedure('" proc-entry "', env)")))
         (compile-lambda-body exp proc-entry))
        (label-header after-lambda)))))
 
@@ -198,9 +199,8 @@
      (make-instruction-sequence 
       '(env proc argl) '(env)
       (string-append (label-header proc-entry)
-		     "env = compiled_procedure_env(proc);\n"
-		     ;; TODO: need to convert formals in next line, fix call to extend_env
-		     "env = extend_environment(" (scheme-list->js formals) ", argl, env);\n"))
+		     (code-line "env = compiled_procedure_env(proc)")
+		     (code-line "env = extend_environment(" (scheme-list->js formals) ", argl, env)")))
      (compile-sequence (lambda-body exp) 'val 'return))))
 
 
@@ -222,13 +222,13 @@
 (define (construct-arglist operand-codes)
   (let ((operand-codes (reverse operand-codes)))
     (if (null? operand-codes)
-        (make-instruction-sequence '() '(argl) "argl = []")
+        (make-instruction-sequence '() '(argl) (code-line "argl = []"))
         (let ((code-to-get-last-arg
                (append-instruction-sequences
                 (car operand-codes)
                 (make-instruction-sequence 
 		 '(val) '(argl)
-		 (string-append "argl = [val]")))))
+		 (code-line "argl = [val]")))))
           (if (null? (cdr operand-codes))
               code-to-get-last-arg
               (preserving '(env)
@@ -242,7 +242,7 @@
           (car operand-codes)
           (make-instruction-sequence 
 	   '(val argl) '(argl)
-	   "argl.unshift(val)"))))
+	   (code-line "argl.unshift(val)")))))
     (if (null? (cdr operand-codes))
         code-for-next-arg
         (preserving '(env)
@@ -269,14 +269,14 @@
 	(label-header compile-procedure-call-start)
 	(make-instruction-sequence 
 	 '(proc) '()
-	 (string-append "if (primitive_procedure(proc)) {\n"
-			"  branch = '" primitive-branch "';\n  break;\n"
-			"} else if (compound_procedure(proc)) {\n"
-			"  branch = '" interpreted-branch "';\n  break;\n"
+	 (string-append "  if (primitive_procedure(proc)) {\n"
+			"    branch = '" primitive-branch "';\n    break;\n"
+			"  } else if (compound_procedure(proc)) {\n"
+			"    branch = '" interpreted-branch "';\n    break;\n"
 			;; TODO: explicit_apply does not yet work -- see argl? below as well
-			"} else if (explicit_apply_procedure(proc)) {\n"
-			"  branch = '" explicit-apply-branch "';\n  break;\n"
-			"}\n")))
+			"  } else if (explicit_apply_procedure(proc)) {\n"
+			"    branch = '" explicit-apply-branch "';\n    break;\n"
+			"  }\n")))
        (parallel-instruction-sequences
 	(append-instruction-sequences
 	 (label-header compiled-branch)
@@ -292,10 +292,10 @@
 	   (label-header explicit-apply-branch)
 	   (make-instruction-sequence                           
 	    '(proc argl) '(proc argl)
-	    (string-append "proc = explicit_apply_procedure(proc);\n"
-			   "// argl? = explicit-apply-args argl;\n"
-			   "branch = " compile-procedure-call-start "l\;\n"
-			   "break")))
+	    (string-append "  proc = explicit_apply_procedure(proc);\n"
+			   "  // argl? = explicit-apply-args argl;\n"
+			   "  branch = " compile-procedure-call-start "l\;\n"
+			   "  break;\n")))
 	  (append-instruction-sequences
 	   (label-header primitive-branch)
 	   (end-with-linkage linkage
@@ -304,7 +304,7 @@
 	     ;; TODO: need primitive support from eceval.js?
 	     ;; the current approach won't work for car/cdr, right?
 	     ;; TODO: fix eval cheat here
-	     (string-append (symbol->string target) " = proc[1](argl)")))))))
+	     (code-line (symbol->string target) " = proc[1](argl)")))))))
        (label-header after-call)))))
 
 ;;;applying compiled procedures
@@ -313,29 +313,25 @@
   (cond ((and (eq? target 'val) (not (eq? linkage 'return)))
          (make-instruction-sequence 
 	  '(proc) all-regs
-	  (string-append "continue_to = '" (x->string linkage) "';\n"
-			 "val = compiled_procedure_entry(proc);\n"
-			 "branch = val;\n"
-			 "break")))
+	  (code-line "continue_to = '" (x->string linkage) "';\n"
+		     "  branch = compiled_procedure_entry(proc);\n"
+		     "  break")))
         ((and (not (eq? target 'val))
               (not (eq? linkage 'return)))
          (let ((proc-return (make-label 'proc-return)))
            (make-instruction-sequence 
 	    '(proc) all-regs
-	    (string-append "continue_to = '" proc-return "';\n"
-			   "val = compiled_procedure_entry(proc);\n"
-			   "branch = val;\n"
-			   "break;\n"
-			   (label-handler proc-return)
-			   (symbol->string target) " = val;\n"
-			   "branch = '" (symbol->string linkage) "';\n"
+	    (code-line "continue_to = '" proc-return "';\n"
+		       "  branch = compiled_procedure_entry(proc);\n"
+		       "  break;\n"
+		       (label-handler proc-return)
+		       (symbol->string target) " = val;\n"
+		       "branch = '" (symbol->string linkage) "';\n"
 			   "break"))))
         ((and (eq? target 'val) (eq? linkage 'return))
          (make-instruction-sequence 
 	  '(proc continue_to) all-regs
-	  (string-append "val = compiled_procedure_entry(proc);\n"
-			 "branch = val;\n"
-			 "break")))
+	  (code-line "branch = compiled_procedure_entry(proc);\n  break")))
         ((and (not (eq? target 'val)) (eq? linkage 'return))
          (error "return linkage, target not val -- COMPILE"
                 target))))
@@ -345,29 +341,29 @@
   (cond ((and (eq? target 'val) (not (eq? linkage 'return)))
          (make-instruction-sequence 
 	  '(proc) all-regs
-	  (string-append "continue_to = '" linkage "';\n"
-			 "save(continue_to);\n" ; why?
-			 "branch = compapp;\n"
-			 "break")))
+	  (string-append "  continue_to = '" linkage "';\n"
+			 "  save(continue_to);\n" ; why?
+			 "  branch = compapp;\n"
+			 "  break;\n")))
         ((and (not (eq? target 'val))
               (not (eq? linkage 'return)))
          (let ((proc-return (make-label 'proc-return)))
            (make-instruction-sequence 
 	    '(proc) all-regs
-	    (string-append "continue_to = '" proc-return "';\n"
-			   "save(continue_to);\n" ; why?
-			   "branch = compapp;\n"
-			   "break;\n"
+	    (string-append "  continue_to = '" proc-return "';\n"
+			   "  save(continue_to);\n" ; why?
+			   "  branch = compapp;\n"
+			   "  break;\n"
 			   (label-header proc-return)
-			   target " = val;\n"
-			   "branch = '" linkage "';\n"
-			   "break"))))
+			   (code-line target " = val")
+			   "  branch = '" linkage "';\n"
+			   "  break;\n"))))
         ((and (eq? target 'val) (eq? linkage 'return))
 	 (make-instruction-sequence 
 	  '(proc continue_to) all-regs
-	  (string-append "save(continue_to);\n" ; why?
-			 "branch = compapp;\n"
-			 "break")))
+	  (string-append "  save(continue_to);\n" ; why?
+			 "  branch = compapp;\n"
+			 "  break;\n")))
         ((and (not (eq? target 'val)) (eq? linkage 'return))
          (error "return linkage, target not val -- COMPILE"
                 target))))
@@ -402,7 +398,7 @@
                                   (registers-modified seq1)))
      (list-union (registers-modified seq1)
                  (registers-modified seq2))
-     (string-append (statements seq1) ";\n" (statements seq2))))
+     (string-append (statements seq1) (statements seq2))))
   (define (append-seq-list seqs)
     (if (null? seqs)
         (empty-instruction-sequence)
@@ -433,9 +429,9 @@
                           (registers-needed seq1))
               (list-difference (registers-modified seq1)
                                (list first-reg))
-              (string-append "save(" (symbol->string first-reg) ");\n"
+              (string-append (code-line "save(" (symbol->string first-reg) ")")
 			     (statements seq1)
-			     (symbol->string first-reg) " = restore();\n"))
+			     (code-line (symbol->string first-reg) " = restore()")))
              seq2)
             (preserving (cdr regs) seq1 seq2)))))
 
@@ -443,7 +439,7 @@
   (make-instruction-sequence
    (registers-needed seq)
    (registers-modified seq)
-   (string-append (statements seq) ";\n" (statements body-seq))))
+   (string-append (statements seq) (statements body-seq))))
 
 (define (parallel-instruction-sequences seq1 seq2)
   (make-instruction-sequence
@@ -451,8 +447,12 @@
                (registers-needed seq2))
    (list-union (registers-modified seq1)
                (registers-modified seq2))
-   (string-append (statements seq1) ";\n" (statements seq2))))
+   (string-append (statements seq1) (statements seq2))))
 
+
+;; Tools for generating compiled code
+(define (code-line . x)
+  (string-append "  " (apply string-append x) ";\n"))
 
 ;; Tools for working conveniently with compiler
 (define (compile-with-wrapper exp)
@@ -460,7 +460,20 @@
 		 "switch (branch) {\n"
 		 "case 'main':\n\n"
 		 (caddr (compile exp 'val 'next))
-		 "\n\nbranch = 'done';\n"
+		 "\n\n  branch = 'done';\n"
+		 "break;\n"
+
+		 "case 'unbound_variable':\n" ;; HACK: traps js proc lookup errors
+		 "case 'unbound-variable':\n"
+		 "  val = 'unbound-variable!';\n"
+		 "  branch = 'signal-error';\n"
+		 "case 'signal-error':\n"
+		 "  val = 'ERROR: ' + val;\n"
+		 "  branch = 'done';\n"
+		 "  break;\n"
+		 "default:\n"
+		 "  val = 'COMPILER ERROR: bad-branch: ' + branch;\n"
+		 "  break;\n"
 		 "} }\n"))
 
 (define (compile-to-file exp)
