@@ -17,12 +17,23 @@ function product(a) { return a.length ? a[0] * product(cdr(a)) : 1 }
 function difference(a) { return a[0] - a[1] }
 function dividend(a) { return a[0] / a[1] }
 
+function equals(a) { return a[0] == a[1] && (a.length > 2 ? equals(cdr(a)) :  true) }
+function gt(a) { return a[0] > a[1] }
+function lt(a) { return a[0] < a[1] }
+function gte(a) { return a[0] >= a[1] }
+function lte(a) { return a[0] <= a[1] }
+
 function lookup_primitive_op(variable) {
     return { 
 	'+': sum,
 	'*': product,
 	'-': difference,
 	'/': dividend,
+	'=': equals,
+	'>': gt,
+	'<': lt,
+	'>=': gte,
+	'<=': lte,
     }[variable];
 }
 function get_primitive_procedure(variable) {
@@ -50,6 +61,7 @@ function explicit_apply_procedure(p) { return p == 'apply' }
 
 // --- Stack, Environment and data storage (eceval.js) ---
 var stack = ['STACK'];
+//  no need to worry about dupes, right? instanceof Array ? x.slice(0) : x
 function save(x) { stack.push(x) };
 function restore() { return stack.pop() };
 
@@ -81,7 +93,7 @@ function extend_environment(variables, values, env, code_source, code_symbol) {
 }
 
 // variables -- note, some cruft (include_context, etc.)
-function lookup_variable_value(variable, env, lookup_exp, include_context) {
+function _lookup_variable_value(variable, env, lookup_exp, include_context) {
     for (i = 0, len = env.length; i < len; i++) {
 	frame_data = env[i].data;
 	if (frame_data.hasOwnProperty(variable)) {
@@ -97,6 +109,12 @@ function lookup_variable_value(variable, env, lookup_exp, include_context) {
 	return get_primitive_procedure(variable);
     }
     return unbound_variable_error;
+}
+// debugging "tap"
+function lookup_variable_value(variable, env) {
+    var x = _lookup_variable_value(variable, env);
+    // console.log(variable + ': ' + x);
+    return x;
 }
 
 // different from text: okay to set something previously undefined
@@ -129,8 +147,7 @@ function machine_loop() {
     branch = 'main';
     var count = 0;
     while(branch !== 'done') {
-	console.log(branch);
-	console.log(argl);
+	// console.log(branch);
 	step();
 	if (count++ > 12399) {
 	    branch = 'done';
